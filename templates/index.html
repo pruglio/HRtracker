@@ -1,0 +1,207 @@
+{% extends 'base.html' %}
+{% block title %}Entrevistas — HRtracker{% endblock %}
+
+{% block content %}
+
+{# Etapa → color badge #}
+{% set badge_colors = {
+  'Aplicado': 'secondary',
+  'Pantalla HR': 'info',
+  'Técnica': 'primary',
+  'Final': 'warning',
+  'Oferta': 'success',
+  'Rechazado': 'danger',
+  'Descartado': 'dark'
+} %}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="mb-0"><i class="fas fa-briefcase me-2 text-primary"></i>Entrevistas</h4>
+  <a href="{{ url_for('new_interview') }}" class="btn btn-primary">
+    <i class="fas fa-plus me-1"></i>Nueva entrevista
+  </a>
+</div>
+
+{# --- Filter card --- #}
+<div class="card filter-card mb-4">
+  <div class="card-body py-2">
+    <form method="GET" action="{{ url_for('index') }}" class="row g-2 align-items-end">
+      <div class="col-6 col-md-3">
+        <label class="form-label form-label-sm mb-1">Etapa</label>
+        <select name="etapa" class="form-select form-select-sm">
+          <option value="">Todas</option>
+          {% for e in etapas %}
+            <option value="{{ e }}" {% if f_etapa == e %}selected{% endif %}>{{ e }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-6 col-md-3">
+        <label class="form-label form-label-sm mb-1">Empresa</label>
+        <input type="text" name="empresa" class="form-control form-control-sm"
+               placeholder="Filtrar empresa" value="{{ f_empresa }}">
+      </div>
+      <div class="col-6 col-md-2">
+        <label class="form-label form-label-sm mb-1">Desde</label>
+        <input type="date" name="desde" class="form-control form-control-sm" value="{{ f_desde }}">
+      </div>
+      <div class="col-6 col-md-2">
+        <label class="form-label form-label-sm mb-1">Hasta</label>
+        <input type="date" name="hasta" class="form-control form-control-sm" value="{{ f_hasta }}">
+      </div>
+      <div class="col-12 col-md-2 d-flex gap-2">
+        <button type="submit" class="btn btn-primary btn-sm flex-grow-1">
+          <i class="fas fa-filter me-1"></i>Filtrar
+        </button>
+        <a href="{{ url_for('index') }}" class="btn btn-outline-secondary btn-sm">
+          <i class="fas fa-times"></i>
+        </a>
+      </div>
+    </form>
+  </div>
+</div>
+
+{# --- Summary --- #}
+<p class="text-muted small mb-2">
+  Mostrando <strong>{{ interviews|length }}</strong>
+  {% if interviews|length != total %}de {{ total }}{% endif %}
+  entrevista{% if total != 1 %}s{% endif %}
+</p>
+
+{% if interviews %}
+
+  {# --- Desktop table --- #}
+  <div class="d-none d-md-block">
+    <div class="card shadow-sm">
+      <div class="table-responsive">
+        <table class="table table-hover mb-0 align-middle">
+          <thead class="table-light">
+            <tr>
+              <th>Empresa / Puesto</th>
+              <th>Etapa</th>
+              <th>Fecha</th>
+              <th>Modalidad</th>
+              <th>Salario</th>
+              <th class="text-end">Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for iv in interviews %}
+            <tr>
+              <td>
+                <a href="{{ url_for('detail', interview_id=iv.id) }}"
+                   class="fw-semibold text-decoration-none text-dark">
+                  {{ iv.empresa }}
+                </a>
+                <br>
+                <small class="text-muted">{{ iv.puesto }}</small>
+              </td>
+              <td>
+                <span class="badge badge-etapa bg-{{ badge_colors.get(iv.etapa, 'secondary') }}">
+                  {{ iv.etapa }}
+                </span>
+              </td>
+              <td>
+                {% if iv.fecha_entrevista %}
+                  <small>{{ iv.fecha_entrevista }}</small>
+                {% else %}
+                  <small class="text-muted">—</small>
+                {% endif %}
+              </td>
+              <td>
+                <small>{{ iv.modalidad or '—' }}</small>
+              </td>
+              <td>
+                <small>
+                {% if iv.salario_min or iv.salario_max %}
+                  {% if iv.salario_min %}{{ "{:,}".format(iv.salario_min) }}{% endif %}
+                  {% if iv.salario_min and iv.salario_max %} – {% endif %}
+                  {% if iv.salario_max %}{{ "{:,}".format(iv.salario_max) }}{% endif %}
+                {% else %}
+                  —
+                {% endif %}
+                </small>
+              </td>
+              <td class="text-end">
+                <a href="{{ url_for('detail', interview_id=iv.id) }}"
+                   class="btn btn-sm btn-outline-primary me-1" title="Ver detalle">
+                  <i class="fas fa-eye"></i>
+                </a>
+                <a href="{{ url_for('edit_interview', interview_id=iv.id) }}"
+                   class="btn btn-sm btn-outline-secondary" title="Editar">
+                  <i class="fas fa-edit"></i>
+                </a>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  {# --- Mobile cards --- #}
+  <div class="d-md-none">
+    {% for iv in interviews %}
+    <div class="card interview-card mb-3">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-start mb-1">
+          <div>
+            <a href="{{ url_for('detail', interview_id=iv.id) }}"
+               class="fw-semibold text-decoration-none text-dark fs-6">
+              {{ iv.empresa }}
+            </a>
+            <div class="text-muted small">{{ iv.puesto }}</div>
+          </div>
+          <span class="badge badge-etapa bg-{{ badge_colors.get(iv.etapa, 'secondary') }} ms-2 flex-shrink-0">
+            {{ iv.etapa }}
+          </span>
+        </div>
+        <div class="d-flex flex-wrap gap-2 mt-2 small text-muted">
+          {% if iv.fecha_entrevista %}
+            <span><i class="fas fa-calendar-alt me-1"></i>{{ iv.fecha_entrevista }}</span>
+          {% endif %}
+          {% if iv.modalidad %}
+            <span><i class="fas fa-map-marker-alt me-1"></i>{{ iv.modalidad }}</span>
+          {% endif %}
+          {% if iv.voice_notes %}
+            <span><i class="fas fa-microphone me-1"></i>{{ iv.voice_notes|length }} nota{% if iv.voice_notes|length != 1 %}s{% endif %}</span>
+          {% endif %}
+        </div>
+        <div class="d-flex gap-2 mt-2">
+          <a href="{{ url_for('detail', interview_id=iv.id) }}"
+             class="btn btn-sm btn-outline-primary flex-grow-1">
+            <i class="fas fa-eye me-1"></i>Ver
+          </a>
+          <a href="{{ url_for('edit_interview', interview_id=iv.id) }}"
+             class="btn btn-sm btn-outline-secondary flex-grow-1">
+            <i class="fas fa-edit me-1"></i>Editar
+          </a>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+{% else %}
+  {# --- Empty state --- #}
+  <div class="text-center py-5">
+    <i class="fas fa-inbox fa-4x text-muted mb-3"></i>
+    <h5 class="text-muted">
+      {% if f_etapa or f_empresa or f_desde or f_hasta %}
+        No hay entrevistas que coincidan con los filtros
+      {% else %}
+        Todavía no hay entrevistas registradas
+      {% endif %}
+    </h5>
+    {% if f_etapa or f_empresa or f_desde or f_hasta %}
+      <a href="{{ url_for('index') }}" class="btn btn-outline-secondary mt-2">
+        <i class="fas fa-times me-1"></i>Limpiar filtros
+      </a>
+    {% else %}
+      <a href="{{ url_for('new_interview') }}" class="btn btn-primary mt-2">
+        <i class="fas fa-plus me-1"></i>Agregar primera entrevista
+      </a>
+    {% endif %}
+  </div>
+{% endif %}
+
+{% endblock %}

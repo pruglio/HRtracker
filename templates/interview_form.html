@@ -1,0 +1,175 @@
+{% extends 'base.html' %}
+{% block title %}{% if interview %}Editar entrevista{% else %}Nueva entrevista{% endif %} — HRtracker{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-12 col-lg-9">
+
+    <div class="card shadow-sm">
+      <div class="card-header bg-primary text-white">
+        <h5 class="mb-0">
+          <i class="fas fa-{% if interview %}edit{% else %}plus{% endif %} me-2"></i>
+          {% if interview %}Editar entrevista{% else %}Nueva entrevista{% endif %}
+        </h5>
+      </div>
+      <div class="card-body">
+
+        <form method="POST"
+              action="{% if interview %}{{ url_for('update_interview', interview_id=interview.id) }}{% else %}{{ url_for('create_interview') }}{% endif %}">
+
+          {# === Empresa y Puesto === #}
+          <p class="form-section-title">Empresa y puesto</p>
+          <div class="row g-3 mb-3">
+            <div class="col-md-6">
+              <label for="empresa" class="form-label">Empresa <span class="text-danger">*</span></label>
+              <div class="input-group">
+                <input type="text" class="form-control" id="empresa" name="empresa"
+                       value="{{ interview.empresa if interview else '' }}" required>
+                <button type="button" class="btn btn-outline-secondary mic-btn" data-target="empresa"
+                        title="Dictado por voz">
+                  <i class="fas fa-microphone"></i>
+                </button>
+              </div>
+              <span class="interim-text text-muted small fst-italic"></span>
+            </div>
+            <div class="col-md-6">
+              <label for="puesto" class="form-label">Puesto / Rol <span class="text-danger">*</span></label>
+              <div class="input-group">
+                <input type="text" class="form-control" id="puesto" name="puesto"
+                       value="{{ interview.puesto if interview else '' }}" required>
+                <button type="button" class="btn btn-outline-secondary mic-btn" data-target="puesto"
+                        title="Dictado por voz">
+                  <i class="fas fa-microphone"></i>
+                </button>
+              </div>
+              <span class="interim-text text-muted small fst-italic"></span>
+            </div>
+          </div>
+
+          {# === Entrevista === #}
+          <p class="form-section-title">Entrevista</p>
+          <div class="row g-3 mb-3">
+            <div class="col-md-4">
+              <label for="fecha_entrevista" class="form-label">Fecha</label>
+              <input type="date" class="form-control" id="fecha_entrevista" name="fecha_entrevista"
+                     value="{{ interview.fecha_entrevista if interview and interview.fecha_entrevista else '' }}">
+            </div>
+            <div class="col-md-8">
+              <label for="etapa" class="form-label">Etapa del proceso</label>
+              <select class="form-select" id="etapa" name="etapa">
+                {% for e in etapas %}
+                  <option value="{{ e }}"
+                    {% if interview and interview.etapa == e %}selected
+                    {% elif not interview and e == 'Aplicado' %}selected{% endif %}>
+                    {{ e }}
+                  </option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+
+          {# === Contacto === #}
+          <p class="form-section-title">Contacto / Recruiter</p>
+          <div class="row g-3 mb-3">
+            <div class="col-md-4">
+              <label for="entrevistador_nombre" class="form-label">Nombre</label>
+              <div class="input-group">
+                <input type="text" class="form-control" id="entrevistador_nombre"
+                       name="entrevistador_nombre"
+                       value="{{ interview.entrevistador_nombre if interview else '' }}">
+                <button type="button" class="btn btn-outline-secondary mic-btn"
+                        data-target="entrevistador_nombre" title="Dictado por voz">
+                  <i class="fas fa-microphone"></i>
+                </button>
+              </div>
+              <span class="interim-text text-muted small fst-italic"></span>
+            </div>
+            <div class="col-md-4">
+              <label for="entrevistador_email" class="form-label">Email</label>
+              <input type="email" class="form-control" id="entrevistador_email"
+                     name="entrevistador_email"
+                     value="{{ interview.entrevistador_email if interview else '' }}">
+            </div>
+            <div class="col-md-4">
+              <label for="entrevistador_linkedin" class="form-label">LinkedIn</label>
+              <input type="url" class="form-control" id="entrevistador_linkedin"
+                     name="entrevistador_linkedin"
+                     value="{{ interview.entrevistador_linkedin if interview else '' }}"
+                     placeholder="https://linkedin.com/in/...">
+            </div>
+          </div>
+
+          {# === Condiciones === #}
+          <p class="form-section-title">Condiciones</p>
+          <div class="row g-3 mb-3">
+            <div class="col-md-4">
+              <label for="salario_min" class="form-label">Salario mínimo</label>
+              <div class="input-group">
+                <span class="input-group-text">$</span>
+                <input type="number" class="form-control" id="salario_min" name="salario_min"
+                       min="0" step="1000" placeholder="45000"
+                       value="{{ interview.salario_min if interview and interview.salario_min else '' }}">
+              </div>
+            </div>
+            <div class="col-md-4">
+              <label for="salario_max" class="form-label">Salario máximo</label>
+              <div class="input-group">
+                <span class="input-group-text">$</span>
+                <input type="number" class="form-control" id="salario_max" name="salario_max"
+                       min="0" step="1000" placeholder="65000"
+                       value="{{ interview.salario_max if interview and interview.salario_max else '' }}">
+              </div>
+            </div>
+            <div class="col-md-4">
+              <label for="modalidad" class="form-label">Modalidad</label>
+              <select class="form-select" id="modalidad" name="modalidad">
+                <option value="">Sin especificar</option>
+                {% for m in modalidades %}
+                  <option value="{{ m }}"
+                    {% if interview and interview.modalidad == m %}selected{% endif %}>
+                    {{ m }}
+                  </option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+
+          {# === Notas === #}
+          <p class="form-section-title">
+            Notas
+            <button type="button" class="btn btn-outline-secondary btn-sm mic-btn ms-2"
+                    data-target="notas" title="Dictado por voz">
+              <i class="fas fa-microphone"></i>
+            </button>
+          </p>
+          <span class="interim-text text-muted small fst-italic d-block mb-1"></span>
+          <textarea class="form-control mb-3" id="notas" name="notas" rows="5"
+                    placeholder="Impresiones, preguntas, próximos pasos...">{{ interview.notas if interview else '' }}</textarea>
+
+          {# === Buttons === #}
+          <div class="d-flex justify-content-end gap-2 mt-2">
+            <a href="{% if interview %}{{ url_for('detail', interview_id=interview.id) }}{% else %}{{ url_for('index') }}{% endif %}"
+               class="btn btn-outline-secondary">
+              <i class="fas fa-times me-1"></i>Cancelar
+            </a>
+            <button type="submit" class="btn btn-primary">
+              <i class="fas fa-save me-1"></i>Guardar
+            </button>
+          </div>
+
+        </form>
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/voice.js') }}"></script>
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    initVoiceToText();
+  });
+</script>
+{% endblock %}

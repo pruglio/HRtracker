@@ -1,0 +1,252 @@
+{% extends 'base.html' %}
+{% block title %}{{ interview.empresa }} — HRtracker{% endblock %}
+
+{% block content %}
+
+{# Hidden input so voice.js can read interview ID #}
+<input type="hidden" id="interview-id" value="{{ interview.id }}">
+
+{% set badge_colors = {
+  'Aplicado': 'secondary',
+  'Pantalla HR': 'info',
+  'Técnica': 'primary',
+  'Final': 'warning',
+  'Oferta': 'success',
+  'Rechazado': 'danger',
+  'Descartado': 'dark'
+} %}
+
+{# === Header card === #}
+<div class="card shadow-sm mb-3">
+  <div class="card-body">
+    <div class="d-flex flex-wrap justify-content-between align-items-start gap-2">
+      <div>
+        <h4 class="mb-0 fw-bold">{{ interview.empresa }}</h4>
+        <p class="text-muted mb-1">{{ interview.puesto }}</p>
+        <span class="badge badge-etapa bg-{{ badge_colors.get(interview.etapa, 'secondary') }} fs-6">
+          {{ interview.etapa }}
+        </span>
+      </div>
+      <div class="d-flex gap-2 flex-shrink-0">
+        <a href="{{ url_for('edit_interview', interview_id=interview.id) }}"
+           class="btn btn-outline-secondary btn-sm">
+          <i class="fas fa-edit me-1"></i>Editar
+        </a>
+        <button type="button" class="btn btn-outline-danger btn-sm"
+                data-bs-toggle="modal" data-bs-target="#deleteModal">
+          <i class="fas fa-trash me-1"></i>Eliminar
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# === Info grid === #}
+<div class="row g-3 mb-3">
+
+  <div class="col-sm-6 col-md-3">
+    <div class="card h-100 shadow-sm">
+      <div class="card-body">
+        <p class="form-section-title mb-1">Fecha</p>
+        <p class="mb-0 fw-semibold">
+          {% if interview.fecha_entrevista %}
+            <i class="fas fa-calendar-alt text-primary me-1"></i>{{ interview.fecha_entrevista }}
+          {% else %}
+            <span class="text-muted">—</span>
+          {% endif %}
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-sm-6 col-md-3">
+    <div class="card h-100 shadow-sm">
+      <div class="card-body">
+        <p class="form-section-title mb-1">Modalidad</p>
+        <p class="mb-0 fw-semibold">
+          {% if interview.modalidad %}
+            <i class="fas fa-map-marker-alt text-primary me-1"></i>{{ interview.modalidad }}
+          {% else %}
+            <span class="text-muted">—</span>
+          {% endif %}
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-sm-6 col-md-3">
+    <div class="card h-100 shadow-sm">
+      <div class="card-body">
+        <p class="form-section-title mb-1">Salario</p>
+        <p class="mb-0 fw-semibold">
+          {% if interview.salario_min or interview.salario_max %}
+            <i class="fas fa-dollar-sign text-primary me-1"></i>
+            {% if interview.salario_min %}{{ "{:,}".format(interview.salario_min) }}{% endif %}
+            {% if interview.salario_min and interview.salario_max %} – {% endif %}
+            {% if interview.salario_max %}{{ "{:,}".format(interview.salario_max) }}{% endif %}
+          {% else %}
+            <span class="text-muted">—</span>
+          {% endif %}
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-sm-6 col-md-3">
+    <div class="card h-100 shadow-sm">
+      <div class="card-body">
+        <p class="form-section-title mb-1">Notas de voz</p>
+        <p class="mb-0 fw-semibold">
+          <i class="fas fa-microphone text-primary me-1"></i>
+          {{ interview.voice_notes|length }} nota{% if interview.voice_notes|length != 1 %}s{% endif %}
+        </p>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+{# === Contact === #}
+{% if interview.entrevistador_nombre or interview.entrevistador_email or interview.entrevistador_linkedin %}
+<div class="card shadow-sm mb-3">
+  <div class="card-body">
+    <p class="form-section-title">Contacto / Recruiter</p>
+    <div class="d-flex flex-wrap gap-3">
+      {% if interview.entrevistador_nombre %}
+        <span><i class="fas fa-user text-primary me-1"></i>{{ interview.entrevistador_nombre }}</span>
+      {% endif %}
+      {% if interview.entrevistador_email %}
+        <span>
+          <i class="fas fa-envelope text-primary me-1"></i>
+          <a href="mailto:{{ interview.entrevistador_email }}">{{ interview.entrevistador_email }}</a>
+        </span>
+      {% endif %}
+      {% if interview.entrevistador_linkedin %}
+        <span>
+          <i class="fab fa-linkedin text-primary me-1"></i>
+          <a href="{{ interview.entrevistador_linkedin }}" target="_blank" rel="noopener">LinkedIn</a>
+        </span>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{# === Written notes === #}
+{% if interview.notas %}
+<div class="card shadow-sm mb-3">
+  <div class="card-body">
+    <p class="form-section-title">Notas</p>
+    <pre class="notes-text mb-0">{{ interview.notas }}</pre>
+  </div>
+</div>
+{% endif %}
+
+{# === Voice notes === #}
+<div class="card shadow-sm mb-3">
+  <div class="card-body">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <p class="form-section-title mb-0">Notas de voz</p>
+      <div class="d-flex align-items-center gap-2">
+        <span id="recording-indicator" class="recording-pulse" style="display:none;">
+          <span class="dot"></span> Grabando...
+        </span>
+        <button id="stop-btn" class="btn btn-danger btn-sm" style="display:none;">
+          <i class="fas fa-stop me-1"></i>Detener
+        </button>
+        <button id="record-btn" class="btn btn-outline-primary btn-sm">
+          <i class="fas fa-microphone me-1"></i>Grabar nota de voz
+        </button>
+      </div>
+    </div>
+
+    <div id="voice-notes-list">
+      {% for vn in interview.voice_notes %}
+      <div class="voice-note-item d-flex align-items-center gap-2 mb-2 p-2 border rounded"
+           data-filename="{{ vn.filename }}">
+        <span class="text-muted small text-nowrap">
+          <i class="fas fa-clock me-1"></i>{{ vn.created_at }}
+        </span>
+        <audio controls
+               src="{{ url_for('serve_voice', interview_id=interview.id, filename=vn.filename) }}"
+               class="flex-grow-1" style="height:36px; min-width:0;"></audio>
+        <button type="button"
+                class="btn btn-sm btn-outline-danger delete-voice-btn flex-shrink-0"
+                data-filename="{{ vn.filename }}" title="Eliminar nota">
+          <i class="fas fa-trash"></i>
+        </button>
+      </div>
+      {% endfor %}
+    </div>
+
+    {% if not interview.voice_notes %}
+    <p id="voice-notes-empty" class="text-muted small mb-0">
+      <i class="fas fa-info-circle me-1"></i>No hay notas de voz aún. Presioná el botón para grabar.
+    </p>
+    {% else %}
+    <p id="voice-notes-empty" class="text-muted small mb-0" style="display:none;">
+      No hay notas de voz.
+    </p>
+    {% endif %}
+  </div>
+</div>
+
+{# === Meta === #}
+<p class="text-muted small text-end">
+  Creada: {{ interview.created_at }}
+  {% if interview.updated_at != interview.created_at %}
+    · Actualizada: {{ interview.updated_at }}
+  {% endif %}
+</p>
+
+<a href="{{ url_for('index') }}" class="btn btn-outline-secondary btn-sm">
+  <i class="fas fa-arrow-left me-1"></i>Volver al listado
+</a>
+
+{# === Delete confirmation modal === #}
+<div class="modal fade" id="deleteModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title text-danger">
+          <i class="fas fa-exclamation-triangle me-2"></i>Eliminar entrevista
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p>¿Estás segura de que querés eliminar la entrevista en
+          <strong>{{ interview.empresa }}</strong> para el puesto de
+          <strong>{{ interview.puesto }}</strong>?</p>
+        <p class="text-danger small mb-0">
+          <i class="fas fa-exclamation-circle me-1"></i>
+          Esta acción no se puede deshacer. También se eliminarán todas las notas de voz asociadas.
+        </p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <form method="POST" action="{{ url_for('delete_interview', interview_id=interview.id) }}" class="d-inline">
+          <button type="submit" class="btn btn-danger">
+            <i class="fas fa-trash me-1"></i>Sí, eliminar
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/voice.js') }}"></script>
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    const interviewId = document.getElementById('interview-id').value;
+    initVoiceRecorder(interviewId);
+
+    // Attach delete handlers to existing voice notes
+    document.querySelectorAll('.delete-voice-btn').forEach(btn => {
+      btn.addEventListener('click', handleDeleteVoiceNote);
+    });
+  });
+</script>
+{% endblock %}
