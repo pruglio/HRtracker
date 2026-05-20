@@ -51,6 +51,16 @@ BENEFICIOS_LABELS = {
     'comidas': 'Comidas / viáticos',
 }
 
+ETAPA_ORDER = {
+    'Oferta': 0,
+    'Final': 1,
+    'Técnica': 2,
+    'Pantalla HR': 3,
+    'Aplicado': 4,
+    'Rechazado': 5,
+    'Descartado': 6,
+}
+
 
 # --- Helpers ---
 
@@ -166,11 +176,55 @@ def sort_key_latest_interview(application):
     return max(fechas) if fechas else (application.get('created_at', '') or '0000')
 
 
+def compute_proxima_entrevista(application, today_str):
+    """Return 'Coordinada', 'A coordinar', or 'Esperando' for an application.
+
+    today_str: ISO date string 'YYYY-MM-DD' for comparison (injected for testability).
+    Rules:
+      - 'Coordinada'  → at least one interview with fecha >= today
+      - 'A coordinar' → at least one interview without a date
+      - 'Esperando'   → no interviews, or all interviews have past dates
+    """
+    interviews = application.get('interviews', [])
+    has_undated = any(not iv.get('fecha_entrevista') for iv in interviews)
+    has_future = any(
+        iv.get('fecha_entrevista', '') >= today_str
+        for iv in interviews
+        if iv.get('fecha_entrevista')
+    )
+    if has_future:
+        return 'Coordinada'
+    if has_undated:
+        return 'A coordinar'
+    return 'Esperando'
+
+
 # --- Routes: Applications ---
 
 @app.route('/')
 def index():
     applications = load_applications()
+    today_str = datetime.today().strftime('%Y-%m-%d')
+
+    # Attach computed status to every application
+    for a in applications:
+        a['proxima_entrevista'] = compute_proxima_entrevista(a, today_str)
+
+    # Build upcoming interviews panel from ALL applications (before filtering)
+    upcoming_interviews = []
+    for a in applications:
+        for iv in a.get('interviews', []):
+            fecha = iv.get('fecha_entrevista', '')
+            if fecha and fecha >= today_str:
+                upcoming_interviews.append({
+                    'empresa': a['empresa'],
+                    'puesto': a['puesto'],
+                    'app_id': a['id'],
+                    'fecha': fecha,
+                    'hora': iv.get('hora_entrevista', ''),
+                    'entrevistador': iv.get('entrevistador_nombre', ''),
+                })
+    upcoming_interviews.sort(key=lambda x: (x['fecha'], x['hora'] or '99:99'))
 
     f_etapa = request.args.get('etapa', '').strip()
     f_empresa = request.args.get('empresa', '').strip()
@@ -192,7 +246,9 @@ def index():
         filtered = [a for a in filtered
                     if application_has_date_in_range(a, desde_date, hasta_date)]
 
+    # Two-pass stable sort: recency descending, then stage ascending
     filtered.sort(key=sort_key_latest_interview, reverse=True)
+    filtered.sort(key=lambda a: ETAPA_ORDER.get(a.get('etapa', ''), 99))
 
     return render_template(
         'index.html',
@@ -203,6 +259,7 @@ def index():
         f_empresa=f_empresa,
         f_desde=f_desde,
         f_hasta=f_hasta,
+        upcoming_interviews=upcoming_interviews,
     )
 
 
@@ -387,6 +444,7 @@ def create_interview(app_id):
         'created_at': now_str(),
         'updated_at': now_str(),
         'fecha_entrevista': request.form.get('fecha_entrevista', '').strip() or None,
+        'hora_entrevista': request.form.get('hora_entrevista', '').strip(),
         'entrevistador_nombre': request.form.get('entrevistador_nombre', '').strip(),
         'entrevistador_email': request.form.get('entrevistador_email', '').strip(),
         'entrevistador_linkedin': request.form.get('entrevistador_linkedin', '').strip(),
@@ -422,6 +480,7 @@ def update_interview(app_id, interview_id):
 
     supabase_client.table('interviews').update({
         'fecha_entrevista': request.form.get('fecha_entrevista', '').strip() or None,
+        'hora_entrevista': request.form.get('hora_entrevista', '').strip(),
         'entrevistador_nombre': request.form.get('entrevistador_nombre', '').strip(),
         'entrevistador_email': request.form.get('entrevistador_email', '').strip(),
         'entrevistador_linkedin': request.form.get('entrevistador_linkedin', '').strip(),
