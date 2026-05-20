@@ -250,7 +250,11 @@ def application_detail(app_id):
     application = find_application(applications, app_id)
     if not application:
         abort(404)
-    return render_template('application_detail.html', application=application)
+    return render_template(
+        'application_detail.html',
+        application=application,
+        beneficios_labels=BENEFICIOS_LABELS,
+    )
 
 
 @app.route('/application/<app_id>/edit')
