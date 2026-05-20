@@ -196,6 +196,7 @@ def new_application():
         application=None,
         etapas=ALLOWED_ETAPAS,
         modalidades=ALLOWED_MODALIDADES,
+        beneficios_labels=BENEFICIOS_LABELS,
     )
 
 
@@ -263,6 +264,7 @@ def edit_application(app_id):
         application=application,
         etapas=ALLOWED_ETAPAS,
         modalidades=ALLOWED_MODALIDADES,
+        beneficios_labels=BENEFICIOS_LABELS,
     )
 
 

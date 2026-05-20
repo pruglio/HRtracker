@@ -110,6 +110,28 @@
           <textarea class="form-control mb-3" id="notas" name="notas" rows="5"
                     placeholder="Impresiones sobre la empresa, el puesto, próximos pasos...">{{ application.notas if application else '' }}</textarea>
 
+          {# === Beneficios === #}
+          <p class="form-section-title">Beneficios</p>
+          <div class="row g-2 mb-2">
+            {% for key, label in beneficios_labels.items() %}
+            <div class="col-6 col-md-3">
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox"
+                       name="beneficios" value="{{ key }}"
+                       id="ben-{{ key }}"
+                       {% if application and key in (application.beneficios or []) %}checked{% endif %}>
+                <label class="form-check-label small" for="ben-{{ key }}">{{ label }}</label>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+          <div class="mb-3">
+            <label for="beneficios_otros" class="form-label small text-muted">Otros beneficios</label>
+            <input type="text" class="form-control form-control-sm" id="beneficios_otros"
+                   name="beneficios_otros" placeholder="Ej: 4 semanas de vacaciones, notebook..."
+                   value="{{ application.beneficios_otros if application else '' }}">
+          </div>
+
           {# === Buttons === #}
           <div class="d-flex justify-content-end gap-2 mt-2">
             <a href="{% if application %}{{ url_for('application_detail', app_id=application.id) }}{% else %}{{ url_for('index') }}{% endif %}"
