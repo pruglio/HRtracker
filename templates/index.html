@@ -21,6 +21,37 @@
   </a>
 </div>
 
+{# --- Upcoming interviews panel --- #}
+{% if upcoming_interviews %}
+<div class="card shadow-sm mb-4">
+  <div class="card-header py-2 bg-white">
+    <h6 class="mb-0"><i class="fas fa-calendar-check me-2 text-primary"></i>Próximas entrevistas</h6>
+  </div>
+  <div class="card-body p-0">
+    <table class="table table-sm table-hover mb-0 align-middle">
+      <tbody>
+        {% for iv in upcoming_interviews %}
+        <tr>
+          <td class="ps-3">
+            <a href="{{ url_for('application_detail', app_id=iv.app_id) }}"
+               class="fw-semibold text-decoration-none text-dark">{{ iv.empresa }}</a>
+            <br><small class="text-muted">{{ iv.puesto }}</small>
+          </td>
+          <td class="text-nowrap">
+            <i class="fas fa-calendar-alt text-primary me-1"></i>
+            {{ iv.fecha }}{% if iv.hora %} {{ iv.hora }}{% endif %}
+          </td>
+          <td class="text-muted small">
+            {% if iv.entrevistador %}<i class="fas fa-user me-1"></i>{{ iv.entrevistador }}{% else %}—{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
 {# --- Filter card --- #}
 <div class="card filter-card mb-4">
   <div class="card-body py-2">
@@ -77,6 +108,7 @@
             <tr>
               <th>Empresa / Puesto</th>
               <th>Etapa</th>
+              <th>Próxima entrevista</th>
               <th>Rating</th>
               <th>Modalidad</th>
               <th>Salario</th>
@@ -101,6 +133,16 @@
                 <span class="badge badge-etapa bg-{{ badge_colors.get(app.etapa, 'secondary') }}">
                   {{ app.etapa }}
                 </span>
+              </td>
+              <td>
+                {% set proxima = app.proxima_entrevista %}
+                {% if proxima == 'Coordinada' %}
+                  <span class="badge bg-success">Coordinada</span>
+                {% elif proxima == 'A coordinar' %}
+                  <span class="badge bg-warning text-dark">A coordinar</span>
+                {% else %}
+                  <span class="badge bg-secondary">Esperando</span>
+                {% endif %}
               </td>
               <td>
                 <span class="rating-stars" data-app-id="{{ app.id }}" data-rating="{{ app.rating or 0 }}">
@@ -164,6 +206,16 @@
           <span class="badge badge-etapa bg-{{ badge_colors.get(app.etapa, 'secondary') }} ms-2 flex-shrink-0">
             {{ app.etapa }}
           </span>
+        </div>
+        <div class="mt-1">
+          {% set proxima = app.proxima_entrevista %}
+          {% if proxima == 'Coordinada' %}
+            <span class="badge bg-success">Coordinada</span>
+          {% elif proxima == 'A coordinar' %}
+            <span class="badge bg-warning text-dark">A coordinar</span>
+          {% else %}
+            <span class="badge bg-secondary">Esperando</span>
+          {% endif %}
         </div>
         <div class="mt-1">
           <span class="rating-stars" data-app-id="{{ app.id }}" data-rating="{{ app.rating or 0 }}">
