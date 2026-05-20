@@ -1,21 +1,33 @@
-import json
 import os
-import shutil
 import time
 import uuid
 from datetime import datetime
+from typing import Optional
 
 from flask import (Flask, abort, flash, jsonify, redirect, render_template,
-                   request, send_from_directory, url_for)
+                   request, url_for)
+from supabase import create_client, Client
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('FLASK_SECRET_KEY', 'hrtracker-secret-key-2026')
 
-# DATA_DIR is configurable so Railway/Heroku deployments can point to a
-# persistent volume (e.g. DATA_DIR=/data). Locally it falls back to ./data.
-DATA_DIR = os.environ.get('DATA_DIR', 'data')
-DATA_FILE = os.path.join(DATA_DIR, 'applications.json')
-VOICE_DIR = os.path.join(DATA_DIR, 'voice_notes')
+SUPABASE_URL = os.environ.get('SUPABASE_URL', '')
+SUPABASE_KEY = os.environ.get('SUPABASE_KEY', '')
+
+_supabase_client: Optional[Client] = None
+
+
+def get_supabase() -> Client:
+    global _supabase_client
+    if _supabase_client is None:
+        _supabase_client = create_client(SUPABASE_URL, SUPABASE_KEY)
+    return _supabase_client
+
+
+# Convenience alias used throughout the module
+supabase_client = type('_Proxy', (), {
+    '__getattr__': staticmethod(lambda name: getattr(get_supabase(), name))
+})()
 
 ALLOWED_ETAPAS = [
     'Aplicado', 'Pantalla HR', 'Técnica', 'Final',
@@ -24,12 +36,10 @@ ALLOWED_ETAPAS = [
 ALLOWED_MODALIDADES = ['Remoto', 'Presencial', 'Híbrido']
 ALLOWED_EXTENSIONS = {'.webm', '.ogg', '.wav', '.mp4', '.m4a'}
 ALLOWED_RATINGS = {1, 2, 3, 4, 5}
-
 ALLOWED_BENEFICIOS = {
     'obra_social', 'bono_anual', 'stock_options', 'home_office',
     'horario_flexible', 'vacaciones_extra', 'vehiculo', 'comidas',
 }
-
 BENEFICIOS_LABELS = {
     'obra_social': 'Obra social / prepaga',
     'bono_anual': 'Bono anual',
@@ -43,40 +53,6 @@ BENEFICIOS_LABELS = {
 
 
 # --- Helpers ---
-
-def load_applications():
-    os.makedirs(DATA_DIR, exist_ok=True)
-    if not os.path.exists(DATA_FILE):
-        return []
-    with open(DATA_FILE, 'r', encoding='utf-8') as f:
-        return json.load(f)
-
-
-def save_applications(applications):
-    os.makedirs(DATA_DIR, exist_ok=True)
-    with open(DATA_FILE, 'w', encoding='utf-8') as f:
-        json.dump(applications, f, ensure_ascii=False, indent=2)
-
-
-def find_application(applications, app_id):
-    return next((a for a in applications if a['id'] == app_id), None)
-
-
-def find_interview(application, interview_id):
-    if not application:
-        return None
-    return next(
-        (iv for iv in application.get('interviews', []) if iv['id'] == interview_id),
-        None,
-    )
-
-
-def find_app_and_interview(applications, app_id, interview_id):
-    app_obj = find_application(applications, app_id)
-    if not app_obj:
-        return None, None
-    return app_obj, find_interview(app_obj, interview_id)
-
 
 def make_id(existing_ids):
     while True:
@@ -114,16 +90,58 @@ def parse_date_filter(value):
         return None
 
 
-def voice_path(app_id, interview_id):
-    return os.path.join(
-        VOICE_DIR,
-        os.path.basename(app_id),
-        os.path.basename(interview_id),
+def _attach_interviews(applications):
+    """Attach interviews (with voice_notes) to a list of application dicts."""
+    if not applications:
+        return applications
+    app_ids = [a['id'] for a in applications]
+    interviews = (
+        supabase_client.table('interviews')
+        .select('*')
+        .in_('application_id', app_ids)
+        .execute()
+        .data
     )
+    voice_notes = []
+    if interviews:
+        iv_ids = [iv['id'] for iv in interviews]
+        voice_notes = (
+            supabase_client.table('voice_notes')
+            .select('*')
+            .in_('interview_id', iv_ids)
+            .execute()
+            .data
+        )
+    vn_by_iv = {}
+    for vn in voice_notes:
+        vn_by_iv.setdefault(vn['interview_id'], []).append(
+            {'filename': vn['filename'], 'created_at': vn['created_at']}
+        )
+    iv_by_app = {}
+    for iv in interviews:
+        iv['voice_notes'] = vn_by_iv.get(iv['id'], [])
+        iv_by_app.setdefault(iv['application_id'], []).append(iv)
+    for a in applications:
+        a['interviews'] = iv_by_app.get(a['id'], [])
+    return applications
+
+
+def load_applications():
+    """Load all applications with nested interviews and voice_notes."""
+    apps = supabase_client.table('applications').select('*').execute().data
+    return _attach_interviews(apps)
+
+
+def load_application(app_id):
+    """Load one application with nested interviews and voice_notes. Returns None if not found."""
+    result = supabase_client.table('applications').select('*').eq('id', app_id).execute()
+    if not result.data:
+        return None
+    apps = _attach_interviews(result.data)
+    return apps[0]
 
 
 def application_has_date_in_range(application, desde_date, hasta_date):
-    """Return True if any interview's fecha_entrevista falls in the given range."""
     for iv in application.get('interviews', []):
         fecha = iv.get('fecha_entrevista')
         if not fecha:
@@ -141,7 +159,6 @@ def application_has_date_in_range(application, desde_date, hasta_date):
 
 
 def sort_key_latest_interview(application):
-    """Sort key: most recent interview fecha, nulls last, then created_at."""
     fechas = [
         iv.get('fecha_entrevista') for iv in application.get('interviews', [])
         if iv.get('fecha_entrevista')
@@ -217,8 +234,8 @@ def create_application():
     if modalidad not in ALLOWED_MODALIDADES:
         modalidad = ''
 
-    applications = load_applications()
-    existing_ids = {a['id'] for a in applications}
+    existing = supabase_client.table('applications').select('id').execute().data
+    existing_ids = {a['id'] for a in existing}
     new_id = make_id(existing_ids)
 
     application = {
@@ -232,22 +249,19 @@ def create_application():
         'salario_min': parse_salary(request.form.get('salario_min')),
         'salario_max': parse_salary(request.form.get('salario_max')),
         'rating': parse_rating(request.form.get('rating')),
+        'notas': request.form.get('notas', '').strip(),
         'beneficios': [b for b in request.form.getlist('beneficios') if b in ALLOWED_BENEFICIOS],
         'beneficios_otros': request.form.get('beneficios_otros', '').strip(),
-        'notas': request.form.get('notas', '').strip(),
-        'interviews': [],
     }
 
-    applications.append(application)
-    save_applications(applications)
+    supabase_client.table('applications').insert(application).execute()
     flash('Postulación guardada correctamente.', 'success')
     return redirect(url_for('application_detail', app_id=new_id))
 
 
 @app.route('/application/<app_id>')
 def application_detail(app_id):
-    applications = load_applications()
-    application = find_application(applications, app_id)
+    application = load_application(app_id)
     if not application:
         abort(404)
     return render_template(
@@ -259,8 +273,7 @@ def application_detail(app_id):
 
 @app.route('/application/<app_id>/edit')
 def edit_application(app_id):
-    applications = load_applications()
-    application = find_application(applications, app_id)
+    application = load_application(app_id)
     if not application:
         abort(404)
     return render_template(
@@ -274,9 +287,8 @@ def edit_application(app_id):
 
 @app.route('/application/<app_id>/edit', methods=['POST'])
 def update_application(app_id):
-    applications = load_applications()
-    application = find_application(applications, app_id)
-    if not application:
+    result = supabase_client.table('applications').select('id').eq('id', app_id).execute()
+    if not result.data:
         abort(404)
 
     empresa = request.form.get('empresa', '').strip()
@@ -286,44 +298,45 @@ def update_application(app_id):
         flash('Empresa y puesto son obligatorios.', 'danger')
         return redirect(url_for('edit_application', app_id=app_id))
 
-    etapa = request.form.get('etapa', application['etapa'])
+    etapa = request.form.get('etapa', 'Aplicado')
     if etapa not in ALLOWED_ETAPAS:
-        etapa = application['etapa']
+        etapa = 'Aplicado'
 
     modalidad = request.form.get('modalidad', '')
     if modalidad not in ALLOWED_MODALIDADES:
         modalidad = ''
 
-    application['empresa'] = empresa
-    application['puesto'] = puesto
-    application['etapa'] = etapa
-    application['modalidad'] = modalidad
-    application['salario_min'] = parse_salary(request.form.get('salario_min'))
-    application['salario_max'] = parse_salary(request.form.get('salario_max'))
-    application['notas'] = request.form.get('notas', '').strip()
-    application['beneficios'] = [b for b in request.form.getlist('beneficios') if b in ALLOWED_BENEFICIOS]
-    application['beneficios_otros'] = request.form.get('beneficios_otros', '').strip()
-    application['updated_at'] = now_str()
+    supabase_client.table('applications').update({
+        'empresa': empresa,
+        'puesto': puesto,
+        'etapa': etapa,
+        'modalidad': modalidad,
+        'salario_min': parse_salary(request.form.get('salario_min')),
+        'salario_max': parse_salary(request.form.get('salario_max')),
+        'notas': request.form.get('notas', '').strip(),
+        'beneficios': [b for b in request.form.getlist('beneficios') if b in ALLOWED_BENEFICIOS],
+        'beneficios_otros': request.form.get('beneficios_otros', '').strip(),
+        'updated_at': now_str(),
+    }).eq('id', app_id).execute()
 
-    save_applications(applications)
     flash('Postulación actualizada correctamente.', 'success')
     return redirect(url_for('application_detail', app_id=app_id))
 
 
 @app.route('/application/<app_id>/delete', methods=['POST'])
 def delete_application(app_id):
-    applications = load_applications()
-    application = find_application(applications, app_id)
-    if not application:
+    result = supabase_client.table('applications').select('id').eq('id', app_id).execute()
+    if not result.data:
         abort(404)
-
-    # Cascade-delete all voice notes for this application
-    shutil.rmtree(
-        os.path.join(VOICE_DIR, os.path.basename(app_id)),
-        ignore_errors=True,
-    )
-    applications = [a for a in applications if a['id'] != app_id]
-    save_applications(applications)
+    # Delete voice files from Storage before DB delete
+    interviews = supabase_client.table('interviews').select('id').eq('application_id', app_id).execute().data
+    for iv in interviews:
+        vns = supabase_client.table('voice_notes').select('filename').eq('interview_id', iv['id']).execute().data
+        paths = [f"{app_id}/{iv['id']}/{vn['filename']}" for vn in vns]
+        if paths:
+            supabase_client.storage.from_('voice-notes').remove(paths)
+    # DB cascade handles interviews + voice_notes rows
+    supabase_client.table('applications').delete().eq('id', app_id).execute()
     flash('Postulación eliminada.', 'success')
     return redirect(url_for('index'))
 
@@ -333,23 +346,22 @@ def update_rating(app_id):
     payload = request.get_json(silent=True) or {}
     rating = parse_rating(payload.get('rating'))
 
-    applications = load_applications()
-    application = find_application(applications, app_id)
-    if not application:
+    result = supabase_client.table('applications').select('id').eq('id', app_id).execute()
+    if not result.data:
         return jsonify({'error': 'Postulación no encontrada'}), 404
 
-    application['rating'] = rating
-    application['updated_at'] = now_str()
-    save_applications(applications)
+    supabase_client.table('applications').update({
+        'rating': rating,
+        'updated_at': now_str(),
+    }).eq('id', app_id).execute()
     return jsonify({'ok': True, 'rating': rating}), 200
 
 
-# --- Routes: Interviews (nested under Applications) ---
+# --- Routes: Interviews ---
 
 @app.route('/application/<app_id>/interview/new')
 def new_interview(app_id):
-    applications = load_applications()
-    application = find_application(applications, app_id)
+    application = load_application(app_id)
     if not application:
         abort(404)
     return render_template(
@@ -361,12 +373,12 @@ def new_interview(app_id):
 
 @app.route('/application/<app_id>/interview', methods=['POST'])
 def create_interview(app_id):
-    applications = load_applications()
-    application = find_application(applications, app_id)
-    if not application:
+    result = supabase_client.table('applications').select('id').eq('id', app_id).execute()
+    if not result.data:
         abort(404)
 
-    existing_ids = {iv['id'] for iv in application.get('interviews', [])}
+    existing = supabase_client.table('interviews').select('id').eq('application_id', app_id).execute().data
+    existing_ids = {iv['id'] for iv in existing}
     new_id = make_id(existing_ids)
 
     interview = {
@@ -379,23 +391,21 @@ def create_interview(app_id):
         'entrevistador_email': request.form.get('entrevistador_email', '').strip(),
         'entrevistador_linkedin': request.form.get('entrevistador_linkedin', '').strip(),
         'notas': request.form.get('notas', '').strip(),
-        'voice_notes': [],
     }
 
-    application.setdefault('interviews', []).append(interview)
-    application['updated_at'] = now_str()
-    save_applications(applications)
+    supabase_client.table('interviews').insert(interview).execute()
+    supabase_client.table('applications').update({'updated_at': now_str()}).eq('id', app_id).execute()
     flash('Entrevista agregada.', 'success')
-    return redirect(
-        url_for('application_detail', app_id=app_id) + f'#iv-{new_id}'
-    )
+    return redirect(url_for('application_detail', app_id=app_id) + f'#iv-{new_id}')
 
 
 @app.route('/application/<app_id>/interview/<interview_id>/edit')
 def edit_interview(app_id, interview_id):
-    applications = load_applications()
-    application, interview = find_app_and_interview(applications, app_id, interview_id)
-    if not application or not interview:
+    application = load_application(app_id)
+    if not application:
+        abort(404)
+    interview = next((iv for iv in application.get('interviews', []) if iv['id'] == interview_id), None)
+    if not interview:
         abort(404)
     return render_template(
         'interview_form.html',
@@ -406,51 +416,47 @@ def edit_interview(app_id, interview_id):
 
 @app.route('/application/<app_id>/interview/<interview_id>/edit', methods=['POST'])
 def update_interview(app_id, interview_id):
-    applications = load_applications()
-    application, interview = find_app_and_interview(applications, app_id, interview_id)
-    if not application or not interview:
+    result = supabase_client.table('interviews').select('id').eq('id', interview_id).eq('application_id', app_id).execute()
+    if not result.data:
         abort(404)
 
-    interview['fecha_entrevista'] = request.form.get('fecha_entrevista', '').strip() or None
-    interview['entrevistador_nombre'] = request.form.get('entrevistador_nombre', '').strip()
-    interview['entrevistador_email'] = request.form.get('entrevistador_email', '').strip()
-    interview['entrevistador_linkedin'] = request.form.get('entrevistador_linkedin', '').strip()
-    interview['notas'] = request.form.get('notas', '').strip()
-    interview['updated_at'] = now_str()
-    application['updated_at'] = now_str()
+    supabase_client.table('interviews').update({
+        'fecha_entrevista': request.form.get('fecha_entrevista', '').strip() or None,
+        'entrevistador_nombre': request.form.get('entrevistador_nombre', '').strip(),
+        'entrevistador_email': request.form.get('entrevistador_email', '').strip(),
+        'entrevistador_linkedin': request.form.get('entrevistador_linkedin', '').strip(),
+        'notas': request.form.get('notas', '').strip(),
+        'updated_at': now_str(),
+    }).eq('id', interview_id).execute()
+    supabase_client.table('applications').update({'updated_at': now_str()}).eq('id', app_id).execute()
 
-    save_applications(applications)
     flash('Entrevista actualizada.', 'success')
-    return redirect(
-        url_for('application_detail', app_id=app_id) + f'#iv-{interview_id}'
-    )
+    return redirect(url_for('application_detail', app_id=app_id) + f'#iv-{interview_id}')
 
 
 @app.route('/application/<app_id>/interview/<interview_id>/delete', methods=['POST'])
 def delete_interview(app_id, interview_id):
-    applications = load_applications()
-    application, interview = find_app_and_interview(applications, app_id, interview_id)
-    if not application or not interview:
+    result = supabase_client.table('interviews').select('id').eq('id', interview_id).eq('application_id', app_id).execute()
+    if not result.data:
         abort(404)
-
-    # Cascade-delete the voice subdirectory for this interview
-    shutil.rmtree(voice_path(app_id, interview_id), ignore_errors=True)
-    application['interviews'] = [
-        iv for iv in application.get('interviews', []) if iv['id'] != interview_id
-    ]
-    application['updated_at'] = now_str()
-    save_applications(applications)
+    # Delete voice files from Storage
+    vns = supabase_client.table('voice_notes').select('filename').eq('interview_id', interview_id).execute().data
+    paths = [f"{app_id}/{interview_id}/{vn['filename']}" for vn in vns]
+    if paths:
+        supabase_client.storage.from_('voice-notes').remove(paths)
+    # DB cascade handles voice_notes rows
+    supabase_client.table('interviews').delete().eq('id', interview_id).execute()
+    supabase_client.table('applications').update({'updated_at': now_str()}).eq('id', app_id).execute()
     flash('Entrevista eliminada.', 'success')
     return redirect(url_for('application_detail', app_id=app_id))
 
 
-# --- Routes: Voice notes (nested) ---
+# --- Routes: Voice notes ---
 
 @app.route('/application/<app_id>/interview/<interview_id>/voice', methods=['POST'])
 def upload_voice(app_id, interview_id):
-    applications = load_applications()
-    application, interview = find_app_and_interview(applications, app_id, interview_id)
-    if not application or not interview:
+    result = supabase_client.table('interviews').select('id').eq('id', interview_id).eq('application_id', app_id).execute()
+    if not result.data:
         return jsonify({'error': 'Entrevista no encontrada'}), 404
 
     audio_file = request.files.get('audio')
@@ -463,27 +469,34 @@ def upload_voice(app_id, interview_id):
         ext = '.webm'
 
     filename = f"nota_{int(time.time() * 1000)}{ext}"
-    target_dir = voice_path(app_id, interview_id)
-    os.makedirs(target_dir, exist_ok=True)
-    audio_file.save(os.path.join(target_dir, filename))
+    storage_path = f"{os.path.basename(app_id)}/{os.path.basename(interview_id)}/{filename}"
+
+    content_type_map = {
+        '.webm': 'audio/webm',
+        '.ogg': 'audio/ogg',
+        '.wav': 'audio/wav',
+        '.mp4': 'audio/mp4',
+        '.m4a': 'audio/x-m4a',
+    }
+    content_type = content_type_map.get(ext, 'audio/webm')
+
+    audio_data = audio_file.read()
+    supabase_client.storage.from_('voice-notes').upload(
+        storage_path, audio_data, {'content-type': content_type}
+    )
 
     created_at = now_str()
-    interview.setdefault('voice_notes', []).append({
+    supabase_client.table('voice_notes').insert({
+        'interview_id': interview_id,
         'filename': filename,
         'created_at': created_at,
-    })
-    interview['updated_at'] = created_at
-    application['updated_at'] = created_at
-    save_applications(applications)
+    }).execute()
+    supabase_client.table('interviews').update({'updated_at': created_at}).eq('id', interview_id).execute()
+    supabase_client.table('applications').update({'updated_at': created_at}).eq('id', app_id).execute()
 
     return jsonify({
         'filename': filename,
-        'url': url_for(
-            'serve_voice',
-            app_id=app_id,
-            interview_id=interview_id,
-            filename=filename,
-        ),
+        'url': url_for('serve_voice', app_id=app_id, interview_id=interview_id, filename=filename),
         'created_at': created_at,
     }), 201
 
@@ -494,30 +507,22 @@ def upload_voice(app_id, interview_id):
 )
 def delete_voice(app_id, interview_id, filename):
     safe_filename = os.path.basename(filename)
-    applications = load_applications()
-    application, interview = find_app_and_interview(applications, app_id, interview_id)
-    if not application or not interview:
-        return jsonify({'error': 'Entrevista no encontrada'}), 404
+    storage_path = f"{os.path.basename(app_id)}/{os.path.basename(interview_id)}/{safe_filename}"
 
-    filepath = os.path.join(voice_path(app_id, interview_id), safe_filename)
-    if os.path.exists(filepath):
-        os.remove(filepath)
-
-    interview['voice_notes'] = [
-        vn for vn in interview.get('voice_notes', [])
-        if vn['filename'] != safe_filename
-    ]
-    interview['updated_at'] = now_str()
-    application['updated_at'] = now_str()
-    save_applications(applications)
+    supabase_client.storage.from_('voice-notes').remove([storage_path])
+    supabase_client.table('voice_notes').delete().eq('interview_id', interview_id).eq('filename', safe_filename).execute()
+    supabase_client.table('interviews').update({'updated_at': now_str()}).eq('id', interview_id).execute()
+    supabase_client.table('applications').update({'updated_at': now_str()}).eq('id', app_id).execute()
     return jsonify({'ok': True}), 200
 
 
 @app.route('/voice/<app_id>/<interview_id>/<filename>')
 def serve_voice(app_id, interview_id, filename):
     safe_filename = os.path.basename(filename)
-    target_dir = voice_path(app_id, interview_id)
-    return send_from_directory(target_dir, safe_filename)
+    storage_path = f"{os.path.basename(app_id)}/{os.path.basename(interview_id)}/{safe_filename}"
+    result = supabase_client.storage.from_('voice-notes').create_signed_url(storage_path, 3600)
+    signed_url = result.get('signedURL') or result.get('signedUrl', '')
+    return redirect(signed_url)
 
 
 if __name__ == '__main__':
