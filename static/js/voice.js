@@ -26,7 +26,6 @@ function initVoiceToText() {
     let isListening = false;
 
     // Find or create the interim display span
-    // It may be a sibling .interim-text after the input-group, or inside .mb-3
     const container = btn.closest('.input-group, .form-section-title, .mb-3, p');
     const interimSpan = container
       ? container.parentElement
@@ -49,7 +48,6 @@ function initVoiceToText() {
       recognition.continuous = false;
       recognition.interimResults = true;
 
-      // Visual: button turns red while listening
       setListening(true);
 
       recognition.onresult = event => {
@@ -99,8 +97,8 @@ function initVoiceToText() {
 
 // --- VOICE NOTE RECORDER ---
 
-function initVoiceRecorder(interviewId) {
-  const recordBtn = document.getElementById('record-btn');
+function initVoiceRecorder(applicationId, interviewId, prefix) {
+  const recordBtn = document.getElementById(`record-btn-${prefix}`);
   if (!recordBtn) return;
 
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
@@ -109,8 +107,8 @@ function initVoiceRecorder(interviewId) {
     return;
   }
 
-  const stopBtn = document.getElementById('stop-btn');
-  const recordingIndicator = document.getElementById('recording-indicator');
+  const stopBtn = document.getElementById(`stop-btn-${prefix}`);
+  const recordingIndicator = document.getElementById(`recording-indicator-${prefix}`);
 
   let mediaRecorder = null;
   let chunks = [];
@@ -151,27 +149,26 @@ function initVoiceRecorder(interviewId) {
         '<i class="fas fa-spinner fa-spin me-1"></i>Guardando...';
 
       try {
-        const resp = await fetch(`/interview/${interviewId}/voice`, {
-          method: 'POST',
-          body: formData,
-        });
+        const resp = await fetch(
+          `/application/${applicationId}/interview/${interviewId}/voice`,
+          { method: 'POST', body: formData },
+        );
         if (!resp.ok) throw new Error('Server error');
         const data = await resp.json();
-        appendVoiceNote(data);
-        const empty = document.getElementById('voice-notes-empty');
+        appendVoiceNote(data, applicationId, interviewId, prefix);
+        const empty = document.getElementById(`voice-notes-empty-${prefix}`);
         if (empty) empty.style.display = 'none';
       } catch {
         alert('Error al guardar la nota de voz. Intentá de nuevo.');
       } finally {
         recordBtn.disabled = false;
         recordBtn.innerHTML =
-          '<i class="fas fa-microphone me-1"></i>Grabar nota de voz';
+          '<i class="fas fa-microphone me-1"></i>Grabar';
       }
     };
 
     mediaRecorder.start();
 
-    // UI
     recordBtn.style.display = 'none';
     stopBtn.style.display = 'inline-block';
     recordingIndicator.style.display = 'inline-flex';
@@ -188,8 +185,8 @@ function initVoiceRecorder(interviewId) {
 }
 
 
-function appendVoiceNote(data) {
-  const list = document.getElementById('voice-notes-list');
+function appendVoiceNote(data, applicationId, interviewId, prefix) {
+  const list = document.getElementById(`voice-notes-list-${prefix}`);
   const div = document.createElement('div');
   div.className =
     'voice-note-item d-flex align-items-center gap-2 mb-2 p-2 border rounded';
@@ -201,7 +198,11 @@ function appendVoiceNote(data) {
     <audio controls src="${data.url}" class="flex-grow-1" style="height:36px; min-width:0;"></audio>
     <button type="button"
             class="btn btn-sm btn-outline-danger delete-voice-btn flex-shrink-0"
-            data-filename="${data.filename}" title="Eliminar nota">
+            data-filename="${data.filename}"
+            data-app-id="${applicationId}"
+            data-interview-id="${interviewId}"
+            data-prefix="${prefix}"
+            title="Eliminar nota">
       <i class="fas fa-trash"></i>
     </button>
   `;
@@ -213,19 +214,22 @@ function appendVoiceNote(data) {
 async function handleDeleteVoiceNote(e) {
   const btn = e.currentTarget;
   const filename = btn.dataset.filename;
-  const interviewId = document.getElementById('interview-id').value;
+  const applicationId = btn.dataset.appId;
+  const interviewId = btn.dataset.interviewId;
+  const prefix = btn.dataset.prefix || interviewId;
 
   if (!confirm('¿Eliminás esta nota de voz?')) return;
 
   try {
-    const resp = await fetch(`/interview/${interviewId}/voice/${filename}`, {
-      method: 'DELETE',
-    });
+    const resp = await fetch(
+      `/application/${applicationId}/interview/${interviewId}/voice/${filename}`,
+      { method: 'DELETE' },
+    );
     if (!resp.ok) throw new Error();
     btn.closest('.voice-note-item').remove();
-    const list = document.getElementById('voice-notes-list');
-    if (list.children.length === 0) {
-      const empty = document.getElementById('voice-notes-empty');
+    const list = document.getElementById(`voice-notes-list-${prefix}`);
+    if (list && list.children.length === 0) {
+      const empty = document.getElementById(`voice-notes-empty-${prefix}`);
       if (empty) empty.style.display = 'block';
     }
   } catch {

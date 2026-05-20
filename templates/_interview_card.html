@@ -1,0 +1,112 @@
+{# Partial: renders one interview card inside application_detail.html.
+   Required context:
+     - application: the parent application (for app.id in URLs)
+     - iv: the interview object
+#}
+{% set pfx = iv.id %}
+<div class="card shadow-sm mb-3 interview-subcard" id="iv-{{ iv.id }}">
+  <div class="card-body">
+
+    {# Header line with date + actions #}
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-2 gap-2">
+      <div>
+        <span class="fw-semibold">
+          <i class="fas fa-calendar-alt text-primary me-1"></i>
+          Entrevista {% if iv.fecha_entrevista %}del <span class="fw-bold">{{ iv.fecha_entrevista }}</span>{% else %}<span class="text-muted fw-normal">(sin fecha)</span>{% endif %}
+        </span>
+      </div>
+      <div class="d-flex gap-1 flex-shrink-0">
+        <a href="{{ url_for('edit_interview', app_id=application.id, interview_id=iv.id) }}"
+           class="btn btn-sm btn-outline-secondary" title="Editar entrevista">
+          <i class="fas fa-edit"></i>
+        </a>
+        <form method="POST"
+              action="{{ url_for('delete_interview', app_id=application.id, interview_id=iv.id) }}"
+              class="d-inline"
+              onsubmit="return confirm('¿Eliminar esta entrevista y sus notas de voz?');">
+          <button type="submit" class="btn btn-sm btn-outline-danger" title="Eliminar entrevista">
+            <i class="fas fa-trash"></i>
+          </button>
+        </form>
+      </div>
+    </div>
+
+    {# Contact (only if any field present) #}
+    {% if iv.entrevistador_nombre or iv.entrevistador_email or iv.entrevistador_linkedin %}
+    <div class="d-flex flex-wrap gap-3 small mb-2">
+      {% if iv.entrevistador_nombre %}
+        <span><i class="fas fa-user text-primary me-1"></i>{{ iv.entrevistador_nombre }}</span>
+      {% endif %}
+      {% if iv.entrevistador_email %}
+        <span>
+          <i class="fas fa-envelope text-primary me-1"></i>
+          <a href="mailto:{{ iv.entrevistador_email }}">{{ iv.entrevistador_email }}</a>
+        </span>
+      {% endif %}
+      {% if iv.entrevistador_linkedin %}
+        <span>
+          <i class="fab fa-linkedin text-primary me-1"></i>
+          <a href="{{ iv.entrevistador_linkedin }}" target="_blank" rel="noopener">LinkedIn</a>
+        </span>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    {# Notes #}
+    {% if iv.notas %}
+    <pre class="notes-text mb-2">{{ iv.notas }}</pre>
+    {% endif %}
+
+    {# Voice notes section #}
+    <div class="mt-3">
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <p class="form-section-title mb-0">Notas de voz</p>
+        <div class="d-flex align-items-center gap-2">
+          <span id="recording-indicator-{{ pfx }}" class="recording-pulse" style="display:none;">
+            <span class="dot"></span> Grabando...
+          </span>
+          <button id="stop-btn-{{ pfx }}" class="btn btn-danger btn-sm" style="display:none;">
+            <i class="fas fa-stop me-1"></i>Detener
+          </button>
+          <button id="record-btn-{{ pfx }}" class="btn btn-outline-primary btn-sm">
+            <i class="fas fa-microphone me-1"></i>Grabar
+          </button>
+        </div>
+      </div>
+
+      <div id="voice-notes-list-{{ pfx }}">
+        {% for vn in iv.voice_notes %}
+        <div class="voice-note-item d-flex align-items-center gap-2 mb-2 p-2 border rounded"
+             data-filename="{{ vn.filename }}">
+          <span class="text-muted small text-nowrap">
+            <i class="fas fa-clock me-1"></i>{{ vn.created_at }}
+          </span>
+          <audio controls
+                 src="{{ url_for('serve_voice', app_id=application.id, interview_id=iv.id, filename=vn.filename) }}"
+                 class="flex-grow-1" style="height:36px; min-width:0;"></audio>
+          <button type="button"
+                  class="btn btn-sm btn-outline-danger delete-voice-btn flex-shrink-0"
+                  data-filename="{{ vn.filename }}"
+                  data-app-id="{{ application.id }}"
+                  data-interview-id="{{ iv.id }}"
+                  data-prefix="{{ pfx }}"
+                  title="Eliminar nota">
+            <i class="fas fa-trash"></i>
+          </button>
+        </div>
+        {% endfor %}
+      </div>
+
+      <p id="voice-notes-empty-{{ pfx }}" class="text-muted small mb-0"
+         style="{% if iv.voice_notes %}display:none;{% endif %}">
+        <i class="fas fa-info-circle me-1"></i>Sin notas de voz.
+      </p>
+    </div>
+
+    {# Meta #}
+    {% if iv.updated_at and iv.updated_at != iv.created_at %}
+    <p class="text-muted small text-end mb-0 mt-2">Actualizada: {{ iv.updated_at }}</p>
+    {% endif %}
+
+  </div>
+</div>

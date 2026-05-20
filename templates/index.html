@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% block title %}Entrevistas — HRtracker{% endblock %}
+{% block title %}Postulaciones — HRtracker{% endblock %}
 
 {% block content %}
 
@@ -15,9 +15,9 @@
 } %}
 
 <div class="d-flex justify-content-between align-items-center mb-3">
-  <h4 class="mb-0"><i class="fas fa-briefcase me-2 text-primary"></i>Entrevistas</h4>
-  <a href="{{ url_for('new_interview') }}" class="btn btn-primary">
-    <i class="fas fa-plus me-1"></i>Nueva entrevista
+  <h4 class="mb-0"><i class="fas fa-briefcase me-2 text-primary"></i>Postulaciones</h4>
+  <a href="{{ url_for('new_application') }}" class="btn btn-primary">
+    <i class="fas fa-plus me-1"></i>Nueva postulación
   </a>
 </div>
 
@@ -61,12 +61,12 @@
 
 {# --- Summary --- #}
 <p class="text-muted small mb-2">
-  Mostrando <strong>{{ interviews|length }}</strong>
-  {% if interviews|length != total %}de {{ total }}{% endif %}
-  entrevista{% if total != 1 %}s{% endif %}
+  Mostrando <strong>{{ applications|length }}</strong>
+  {% if applications|length != total %}de {{ total }}{% endif %}
+  postulaci{% if total == 1 %}ón{% else %}ones{% endif %}
 </p>
 
-{% if interviews %}
+{% if applications %}
 
   {# --- Desktop table --- #}
   <div class="d-none d-md-block">
@@ -77,55 +77,65 @@
             <tr>
               <th>Empresa / Puesto</th>
               <th>Etapa</th>
-              <th>Fecha</th>
+              <th>Rating</th>
               <th>Modalidad</th>
               <th>Salario</th>
+              <th class="text-center" title="Cantidad de entrevistas">
+                <i class="fas fa-comments"></i>
+              </th>
               <th class="text-end">Acciones</th>
             </tr>
           </thead>
           <tbody>
-            {% for iv in interviews %}
+            {% for app in applications %}
             <tr>
               <td>
-                <a href="{{ url_for('detail', interview_id=iv.id) }}"
+                <a href="{{ url_for('application_detail', app_id=app.id) }}"
                    class="fw-semibold text-decoration-none text-dark">
-                  {{ iv.empresa }}
+                  {{ app.empresa }}
                 </a>
                 <br>
-                <small class="text-muted">{{ iv.puesto }}</small>
+                <small class="text-muted">{{ app.puesto }}</small>
               </td>
               <td>
-                <span class="badge badge-etapa bg-{{ badge_colors.get(iv.etapa, 'secondary') }}">
-                  {{ iv.etapa }}
+                <span class="badge badge-etapa bg-{{ badge_colors.get(app.etapa, 'secondary') }}">
+                  {{ app.etapa }}
                 </span>
               </td>
               <td>
-                {% if iv.fecha_entrevista %}
-                  <small>{{ iv.fecha_entrevista }}</small>
-                {% else %}
-                  <small class="text-muted">—</small>
-                {% endif %}
+                <span class="rating-stars" data-app-id="{{ app.id }}" data-rating="{{ app.rating or 0 }}">
+                  {% for i in range(1, 6) %}
+                    <i class="fa-star {% if app.rating and i <= app.rating %}fas text-warning{% else %}far text-muted{% endif %}"
+                       data-value="{{ i }}" role="button" aria-label="{{ i }} estrella{% if i != 1 %}s{% endif %}"></i>
+                  {% endfor %}
+                  <i class="fas fa-times-circle text-muted clear-rating ms-1"
+                     role="button" aria-label="Quitar rating"
+                     style="{% if not app.rating %}display:none;{% endif %}"></i>
+                </span>
               </td>
               <td>
-                <small>{{ iv.modalidad or '—' }}</small>
+                <small>{{ app.modalidad or '—' }}</small>
               </td>
               <td>
                 <small>
-                {% if iv.salario_min or iv.salario_max %}
-                  {% if iv.salario_min %}{{ "{:,}".format(iv.salario_min) }}{% endif %}
-                  {% if iv.salario_min and iv.salario_max %} – {% endif %}
-                  {% if iv.salario_max %}{{ "{:,}".format(iv.salario_max) }}{% endif %}
+                {% if app.salario_min or app.salario_max %}
+                  {% if app.salario_min %}{{ "{:,}".format(app.salario_min) }}{% endif %}
+                  {% if app.salario_min and app.salario_max %} – {% endif %}
+                  {% if app.salario_max %}{{ "{:,}".format(app.salario_max) }}{% endif %}
                 {% else %}
                   —
                 {% endif %}
                 </small>
               </td>
+              <td class="text-center">
+                <small class="text-muted">{{ app.interviews|length }}</small>
+              </td>
               <td class="text-end">
-                <a href="{{ url_for('detail', interview_id=iv.id) }}"
+                <a href="{{ url_for('application_detail', app_id=app.id) }}"
                    class="btn btn-sm btn-outline-primary me-1" title="Ver detalle">
                   <i class="fas fa-eye"></i>
                 </a>
-                <a href="{{ url_for('edit_interview', interview_id=iv.id) }}"
+                <a href="{{ url_for('edit_application', app_id=app.id) }}"
                    class="btn btn-sm btn-outline-secondary" title="Editar">
                   <i class="fas fa-edit"></i>
                 </a>
@@ -140,38 +150,52 @@
 
   {# --- Mobile cards --- #}
   <div class="d-md-none">
-    {% for iv in interviews %}
+    {% for app in applications %}
     <div class="card interview-card mb-3">
       <div class="card-body">
         <div class="d-flex justify-content-between align-items-start mb-1">
           <div>
-            <a href="{{ url_for('detail', interview_id=iv.id) }}"
+            <a href="{{ url_for('application_detail', app_id=app.id) }}"
                class="fw-semibold text-decoration-none text-dark fs-6">
-              {{ iv.empresa }}
+              {{ app.empresa }}
             </a>
-            <div class="text-muted small">{{ iv.puesto }}</div>
+            <div class="text-muted small">{{ app.puesto }}</div>
           </div>
-          <span class="badge badge-etapa bg-{{ badge_colors.get(iv.etapa, 'secondary') }} ms-2 flex-shrink-0">
-            {{ iv.etapa }}
+          <span class="badge badge-etapa bg-{{ badge_colors.get(app.etapa, 'secondary') }} ms-2 flex-shrink-0">
+            {{ app.etapa }}
+          </span>
+        </div>
+        <div class="mt-1">
+          <span class="rating-stars" data-app-id="{{ app.id }}" data-rating="{{ app.rating or 0 }}">
+            {% for i in range(1, 6) %}
+              <i class="fa-star {% if app.rating and i <= app.rating %}fas text-warning{% else %}far text-muted{% endif %}"
+                 data-value="{{ i }}" role="button" aria-label="{{ i }} estrellas"></i>
+            {% endfor %}
+            <i class="fas fa-times-circle text-muted clear-rating ms-1"
+               role="button" aria-label="Quitar rating"
+               style="{% if not app.rating %}display:none;{% endif %}"></i>
           </span>
         </div>
         <div class="d-flex flex-wrap gap-2 mt-2 small text-muted">
-          {% if iv.fecha_entrevista %}
-            <span><i class="fas fa-calendar-alt me-1"></i>{{ iv.fecha_entrevista }}</span>
+          {% if app.modalidad %}
+            <span><i class="fas fa-map-marker-alt me-1"></i>{{ app.modalidad }}</span>
           {% endif %}
-          {% if iv.modalidad %}
-            <span><i class="fas fa-map-marker-alt me-1"></i>{{ iv.modalidad }}</span>
-          {% endif %}
-          {% if iv.voice_notes %}
-            <span><i class="fas fa-microphone me-1"></i>{{ iv.voice_notes|length }} nota{% if iv.voice_notes|length != 1 %}s{% endif %}</span>
+          <span><i class="fas fa-comments me-1"></i>{{ app.interviews|length }} entrevista{% if app.interviews|length != 1 %}s{% endif %}</span>
+          {% if app.salario_min or app.salario_max %}
+            <span>
+              <i class="fas fa-dollar-sign me-1"></i>
+              {% if app.salario_min %}{{ "{:,}".format(app.salario_min) }}{% endif %}
+              {% if app.salario_min and app.salario_max %}–{% endif %}
+              {% if app.salario_max %}{{ "{:,}".format(app.salario_max) }}{% endif %}
+            </span>
           {% endif %}
         </div>
         <div class="d-flex gap-2 mt-2">
-          <a href="{{ url_for('detail', interview_id=iv.id) }}"
+          <a href="{{ url_for('application_detail', app_id=app.id) }}"
              class="btn btn-sm btn-outline-primary flex-grow-1">
             <i class="fas fa-eye me-1"></i>Ver
           </a>
-          <a href="{{ url_for('edit_interview', interview_id=iv.id) }}"
+          <a href="{{ url_for('edit_application', app_id=app.id) }}"
              class="btn btn-sm btn-outline-secondary flex-grow-1">
             <i class="fas fa-edit me-1"></i>Editar
           </a>
@@ -187,9 +211,9 @@
     <i class="fas fa-inbox fa-4x text-muted mb-3"></i>
     <h5 class="text-muted">
       {% if f_etapa or f_empresa or f_desde or f_hasta %}
-        No hay entrevistas que coincidan con los filtros
+        No hay postulaciones que coincidan con los filtros
       {% else %}
-        Todavía no hay entrevistas registradas
+        Todavía no hay postulaciones registradas
       {% endif %}
     </h5>
     {% if f_etapa or f_empresa or f_desde or f_hasta %}
@@ -197,11 +221,20 @@
         <i class="fas fa-times me-1"></i>Limpiar filtros
       </a>
     {% else %}
-      <a href="{{ url_for('new_interview') }}" class="btn btn-primary mt-2">
-        <i class="fas fa-plus me-1"></i>Agregar primera entrevista
+      <a href="{{ url_for('new_application') }}" class="btn btn-primary mt-2">
+        <i class="fas fa-plus me-1"></i>Agregar primera postulación
       </a>
     {% endif %}
   </div>
 {% endif %}
 
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/rating.js') }}"></script>
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    initRatingStars();
+  });
+</script>
 {% endblock %}

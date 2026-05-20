@@ -9,10 +9,13 @@ from flask import (Flask, abort, flash, jsonify, redirect, render_template,
                    request, send_from_directory, url_for)
 
 app = Flask(__name__)
-app.secret_key = 'hrtracker-secret-key-2026'
+app.secret_key = os.environ.get('FLASK_SECRET_KEY', 'hrtracker-secret-key-2026')
 
-DATA_FILE = 'data/interviews.json'
-VOICE_DIR = 'data/voice_notes'
+# DATA_DIR is configurable so Railway/Heroku deployments can point to a
+# persistent volume (e.g. DATA_DIR=/data). Locally it falls back to ./data.
+DATA_DIR = os.environ.get('DATA_DIR', 'data')
+DATA_FILE = os.path.join(DATA_DIR, 'applications.json')
+VOICE_DIR = os.path.join(DATA_DIR, 'voice_notes')
 
 ALLOWED_ETAPAS = [
     'Aplicado', 'Pantalla HR', 'Técnica', 'Final',
@@ -20,26 +23,43 @@ ALLOWED_ETAPAS = [
 ]
 ALLOWED_MODALIDADES = ['Remoto', 'Presencial', 'Híbrido']
 ALLOWED_EXTENSIONS = {'.webm', '.ogg', '.wav', '.mp4', '.m4a'}
+ALLOWED_RATINGS = {1, 2, 3, 4, 5}
 
 
 # --- Helpers ---
 
-def load_interviews():
-    os.makedirs('data', exist_ok=True)
+def load_applications():
+    os.makedirs(DATA_DIR, exist_ok=True)
     if not os.path.exists(DATA_FILE):
         return []
     with open(DATA_FILE, 'r', encoding='utf-8') as f:
         return json.load(f)
 
 
-def save_interviews(interviews):
-    os.makedirs('data', exist_ok=True)
+def save_applications(applications):
+    os.makedirs(DATA_DIR, exist_ok=True)
     with open(DATA_FILE, 'w', encoding='utf-8') as f:
-        json.dump(interviews, f, ensure_ascii=False, indent=2)
+        json.dump(applications, f, ensure_ascii=False, indent=2)
 
 
-def find_by_id(interviews, interview_id):
-    return next((i for i in interviews if i['id'] == interview_id), None)
+def find_application(applications, app_id):
+    return next((a for a in applications if a['id'] == app_id), None)
+
+
+def find_interview(application, interview_id):
+    if not application:
+        return None
+    return next(
+        (iv for iv in application.get('interviews', []) if iv['id'] == interview_id),
+        None,
+    )
+
+
+def find_app_and_interview(applications, app_id, interview_id):
+    app_obj = find_application(applications, app_id)
+    if not app_obj:
+        return None, None
+    return app_obj, find_interview(app_obj, interview_id)
 
 
 def make_id(existing_ids):
@@ -61,6 +81,16 @@ def parse_salary(value):
         return None
 
 
+def parse_rating(value):
+    if value is None or value == '' or value == 'null':
+        return None
+    try:
+        v = int(value)
+        return v if v in ALLOWED_RATINGS else None
+    except (TypeError, ValueError):
+        return None
+
+
 def parse_date_filter(value):
     try:
         return datetime.strptime(value, '%Y-%m-%d').date()
@@ -68,49 +98,73 @@ def parse_date_filter(value):
         return None
 
 
-# --- Routes ---
+def voice_path(app_id, interview_id):
+    return os.path.join(
+        VOICE_DIR,
+        os.path.basename(app_id),
+        os.path.basename(interview_id),
+    )
+
+
+def application_has_date_in_range(application, desde_date, hasta_date):
+    """Return True if any interview's fecha_entrevista falls in the given range."""
+    for iv in application.get('interviews', []):
+        fecha = iv.get('fecha_entrevista')
+        if not fecha:
+            continue
+        try:
+            d = datetime.strptime(fecha, '%Y-%m-%d').date()
+        except ValueError:
+            continue
+        if desde_date and d < desde_date:
+            continue
+        if hasta_date and d > hasta_date:
+            continue
+        return True
+    return False
+
+
+def sort_key_latest_interview(application):
+    """Sort key: most recent interview fecha, nulls last, then created_at."""
+    fechas = [
+        iv.get('fecha_entrevista') for iv in application.get('interviews', [])
+        if iv.get('fecha_entrevista')
+    ]
+    return max(fechas) if fechas else (application.get('created_at', '') or '0000')
+
+
+# --- Routes: Applications ---
 
 @app.route('/')
 def index():
-    interviews = load_interviews()
+    applications = load_applications()
 
-    # Filters
     f_etapa = request.args.get('etapa', '').strip()
     f_empresa = request.args.get('empresa', '').strip()
     f_desde = request.args.get('desde', '').strip()
     f_hasta = request.args.get('hasta', '').strip()
 
-    filtered = interviews
+    filtered = applications
 
     if f_etapa and f_etapa in ALLOWED_ETAPAS:
-        filtered = [i for i in filtered if i.get('etapa') == f_etapa]
+        filtered = [a for a in filtered if a.get('etapa') == f_etapa]
 
     if f_empresa:
-        filtered = [i for i in filtered
-                    if f_empresa.lower() in i.get('empresa', '').lower()]
+        filtered = [a for a in filtered
+                    if f_empresa.lower() in a.get('empresa', '').lower()]
 
     desde_date = parse_date_filter(f_desde)
-    if desde_date:
-        filtered = [i for i in filtered
-                    if i.get('fecha_entrevista') and
-                    datetime.strptime(i['fecha_entrevista'], '%Y-%m-%d').date() >= desde_date]
-
     hasta_date = parse_date_filter(f_hasta)
-    if hasta_date:
-        filtered = [i for i in filtered
-                    if i.get('fecha_entrevista') and
-                    datetime.strptime(i['fecha_entrevista'], '%Y-%m-%d').date() <= hasta_date]
+    if desde_date or hasta_date:
+        filtered = [a for a in filtered
+                    if application_has_date_in_range(a, desde_date, hasta_date)]
 
-    # Sort by fecha_entrevista descending, nulls last
-    filtered.sort(
-        key=lambda i: i.get('fecha_entrevista') or '0000-00-00',
-        reverse=True
-    )
+    filtered.sort(key=sort_key_latest_interview, reverse=True)
 
     return render_template(
         'index.html',
-        interviews=filtered,
-        total=len(interviews),
+        applications=filtered,
+        total=len(applications),
         etapas=ALLOWED_ETAPAS,
         f_etapa=f_etapa,
         f_empresa=f_empresa,
@@ -119,24 +173,24 @@ def index():
     )
 
 
-@app.route('/interview/new')
-def new_interview():
+@app.route('/application/new')
+def new_application():
     return render_template(
-        'interview_form.html',
-        interview=None,
+        'application_form.html',
+        application=None,
         etapas=ALLOWED_ETAPAS,
         modalidades=ALLOWED_MODALIDADES,
     )
 
 
-@app.route('/interview', methods=['POST'])
-def create_interview():
+@app.route('/application', methods=['POST'])
+def create_application():
     empresa = request.form.get('empresa', '').strip()
     puesto = request.form.get('puesto', '').strip()
 
     if not empresa or not puesto:
         flash('Empresa y puesto son obligatorios.', 'danger')
-        return redirect(url_for('new_interview'))
+        return redirect(url_for('new_application'))
 
     etapa = request.form.get('etapa', 'Aplicado')
     if etapa not in ALLOWED_ETAPAS:
@@ -146,62 +200,59 @@ def create_interview():
     if modalidad not in ALLOWED_MODALIDADES:
         modalidad = ''
 
-    interviews = load_interviews()
-    existing_ids = {i['id'] for i in interviews}
+    applications = load_applications()
+    existing_ids = {a['id'] for a in applications}
     new_id = make_id(existing_ids)
 
-    interview = {
+    application = {
         'id': new_id,
         'created_at': now_str(),
         'updated_at': now_str(),
         'empresa': empresa,
         'puesto': puesto,
-        'fecha_entrevista': request.form.get('fecha_entrevista', '').strip() or None,
         'etapa': etapa,
-        'entrevistador_nombre': request.form.get('entrevistador_nombre', '').strip(),
-        'entrevistador_email': request.form.get('entrevistador_email', '').strip(),
-        'entrevistador_linkedin': request.form.get('entrevistador_linkedin', '').strip(),
+        'modalidad': modalidad,
         'salario_min': parse_salary(request.form.get('salario_min')),
         'salario_max': parse_salary(request.form.get('salario_max')),
-        'modalidad': modalidad,
+        'rating': parse_rating(request.form.get('rating')),
         'notas': request.form.get('notas', '').strip(),
-        'voice_notes': [],
+        'interviews': [],
     }
 
-    interviews.append(interview)
-    save_interviews(interviews)
-    flash('Entrevista guardada correctamente.', 'success')
-    return redirect(url_for('detail', interview_id=new_id))
+    applications.append(application)
+    save_applications(applications)
+    flash('Postulación guardada correctamente.', 'success')
+    return redirect(url_for('application_detail', app_id=new_id))
 
 
-@app.route('/interview/<interview_id>')
-def detail(interview_id):
-    interviews = load_interviews()
-    interview = find_by_id(interviews, interview_id)
-    if not interview:
+@app.route('/application/<app_id>')
+def application_detail(app_id):
+    applications = load_applications()
+    application = find_application(applications, app_id)
+    if not application:
         abort(404)
-    return render_template('interview_detail.html', interview=interview)
+    return render_template('application_detail.html', application=application)
 
 
-@app.route('/interview/<interview_id>/edit')
-def edit_interview(interview_id):
-    interviews = load_interviews()
-    interview = find_by_id(interviews, interview_id)
-    if not interview:
+@app.route('/application/<app_id>/edit')
+def edit_application(app_id):
+    applications = load_applications()
+    application = find_application(applications, app_id)
+    if not application:
         abort(404)
     return render_template(
-        'interview_form.html',
-        interview=interview,
+        'application_form.html',
+        application=application,
         etapas=ALLOWED_ETAPAS,
         modalidades=ALLOWED_MODALIDADES,
     )
 
 
-@app.route('/interview/<interview_id>/edit', methods=['POST'])
-def update_interview(interview_id):
-    interviews = load_interviews()
-    interview = find_by_id(interviews, interview_id)
-    if not interview:
+@app.route('/application/<app_id>/edit', methods=['POST'])
+def update_application(app_id):
+    applications = load_applications()
+    application = find_application(applications, app_id)
+    if not application:
         abort(404)
 
     empresa = request.form.get('empresa', '').strip()
@@ -209,53 +260,171 @@ def update_interview(interview_id):
 
     if not empresa or not puesto:
         flash('Empresa y puesto son obligatorios.', 'danger')
-        return redirect(url_for('edit_interview', interview_id=interview_id))
+        return redirect(url_for('edit_application', app_id=app_id))
 
-    etapa = request.form.get('etapa', interview['etapa'])
+    etapa = request.form.get('etapa', application['etapa'])
     if etapa not in ALLOWED_ETAPAS:
-        etapa = interview['etapa']
+        etapa = application['etapa']
 
     modalidad = request.form.get('modalidad', '')
     if modalidad not in ALLOWED_MODALIDADES:
         modalidad = ''
 
-    interview['empresa'] = empresa
-    interview['puesto'] = puesto
-    interview['fecha_entrevista'] = request.form.get('fecha_entrevista', '').strip() or None
-    interview['etapa'] = etapa
-    interview['entrevistador_nombre'] = request.form.get('entrevistador_nombre', '').strip()
-    interview['entrevistador_email'] = request.form.get('entrevistador_email', '').strip()
-    interview['entrevistador_linkedin'] = request.form.get('entrevistador_linkedin', '').strip()
-    interview['salario_min'] = parse_salary(request.form.get('salario_min'))
-    interview['salario_max'] = parse_salary(request.form.get('salario_max'))
-    interview['modalidad'] = modalidad
-    interview['notas'] = request.form.get('notas', '').strip()
-    interview['updated_at'] = now_str()
+    application['empresa'] = empresa
+    application['puesto'] = puesto
+    application['etapa'] = etapa
+    application['modalidad'] = modalidad
+    application['salario_min'] = parse_salary(request.form.get('salario_min'))
+    application['salario_max'] = parse_salary(request.form.get('salario_max'))
+    application['notas'] = request.form.get('notas', '').strip()
+    application['updated_at'] = now_str()
 
-    save_interviews(interviews)
-    flash('Entrevista actualizada correctamente.', 'success')
-    return redirect(url_for('detail', interview_id=interview_id))
+    save_applications(applications)
+    flash('Postulación actualizada correctamente.', 'success')
+    return redirect(url_for('application_detail', app_id=app_id))
 
 
-@app.route('/interview/<interview_id>/delete', methods=['POST'])
-def delete_interview(interview_id):
-    interviews = load_interviews()
-    interview = find_by_id(interviews, interview_id)
-    if not interview:
+@app.route('/application/<app_id>/delete', methods=['POST'])
+def delete_application(app_id):
+    applications = load_applications()
+    application = find_application(applications, app_id)
+    if not application:
         abort(404)
 
-    shutil.rmtree(os.path.join(VOICE_DIR, interview_id), ignore_errors=True)
-    interviews = [i for i in interviews if i['id'] != interview_id]
-    save_interviews(interviews)
-    flash('Entrevista eliminada.', 'success')
+    # Cascade-delete all voice notes for this application
+    shutil.rmtree(
+        os.path.join(VOICE_DIR, os.path.basename(app_id)),
+        ignore_errors=True,
+    )
+    applications = [a for a in applications if a['id'] != app_id]
+    save_applications(applications)
+    flash('Postulación eliminada.', 'success')
     return redirect(url_for('index'))
 
 
-@app.route('/interview/<interview_id>/voice', methods=['POST'])
-def upload_voice(interview_id):
-    interviews = load_interviews()
-    interview = find_by_id(interviews, interview_id)
-    if not interview:
+@app.route('/application/<app_id>/rating', methods=['POST'])
+def update_rating(app_id):
+    payload = request.get_json(silent=True) or {}
+    rating = parse_rating(payload.get('rating'))
+
+    applications = load_applications()
+    application = find_application(applications, app_id)
+    if not application:
+        return jsonify({'error': 'Postulación no encontrada'}), 404
+
+    application['rating'] = rating
+    application['updated_at'] = now_str()
+    save_applications(applications)
+    return jsonify({'ok': True, 'rating': rating}), 200
+
+
+# --- Routes: Interviews (nested under Applications) ---
+
+@app.route('/application/<app_id>/interview/new')
+def new_interview(app_id):
+    applications = load_applications()
+    application = find_application(applications, app_id)
+    if not application:
+        abort(404)
+    return render_template(
+        'interview_form.html',
+        application=application,
+        interview=None,
+    )
+
+
+@app.route('/application/<app_id>/interview', methods=['POST'])
+def create_interview(app_id):
+    applications = load_applications()
+    application = find_application(applications, app_id)
+    if not application:
+        abort(404)
+
+    existing_ids = {iv['id'] for iv in application.get('interviews', [])}
+    new_id = make_id(existing_ids)
+
+    interview = {
+        'id': new_id,
+        'application_id': app_id,
+        'created_at': now_str(),
+        'updated_at': now_str(),
+        'fecha_entrevista': request.form.get('fecha_entrevista', '').strip() or None,
+        'entrevistador_nombre': request.form.get('entrevistador_nombre', '').strip(),
+        'entrevistador_email': request.form.get('entrevistador_email', '').strip(),
+        'entrevistador_linkedin': request.form.get('entrevistador_linkedin', '').strip(),
+        'notas': request.form.get('notas', '').strip(),
+        'voice_notes': [],
+    }
+
+    application.setdefault('interviews', []).append(interview)
+    application['updated_at'] = now_str()
+    save_applications(applications)
+    flash('Entrevista agregada.', 'success')
+    return redirect(
+        url_for('application_detail', app_id=app_id) + f'#iv-{new_id}'
+    )
+
+
+@app.route('/application/<app_id>/interview/<interview_id>/edit')
+def edit_interview(app_id, interview_id):
+    applications = load_applications()
+    application, interview = find_app_and_interview(applications, app_id, interview_id)
+    if not application or not interview:
+        abort(404)
+    return render_template(
+        'interview_form.html',
+        application=application,
+        interview=interview,
+    )
+
+
+@app.route('/application/<app_id>/interview/<interview_id>/edit', methods=['POST'])
+def update_interview(app_id, interview_id):
+    applications = load_applications()
+    application, interview = find_app_and_interview(applications, app_id, interview_id)
+    if not application or not interview:
+        abort(404)
+
+    interview['fecha_entrevista'] = request.form.get('fecha_entrevista', '').strip() or None
+    interview['entrevistador_nombre'] = request.form.get('entrevistador_nombre', '').strip()
+    interview['entrevistador_email'] = request.form.get('entrevistador_email', '').strip()
+    interview['entrevistador_linkedin'] = request.form.get('entrevistador_linkedin', '').strip()
+    interview['notas'] = request.form.get('notas', '').strip()
+    interview['updated_at'] = now_str()
+    application['updated_at'] = now_str()
+
+    save_applications(applications)
+    flash('Entrevista actualizada.', 'success')
+    return redirect(
+        url_for('application_detail', app_id=app_id) + f'#iv-{interview_id}'
+    )
+
+
+@app.route('/application/<app_id>/interview/<interview_id>/delete', methods=['POST'])
+def delete_interview(app_id, interview_id):
+    applications = load_applications()
+    application, interview = find_app_and_interview(applications, app_id, interview_id)
+    if not application or not interview:
+        abort(404)
+
+    # Cascade-delete the voice subdirectory for this interview
+    shutil.rmtree(voice_path(app_id, interview_id), ignore_errors=True)
+    application['interviews'] = [
+        iv for iv in application.get('interviews', []) if iv['id'] != interview_id
+    ]
+    application['updated_at'] = now_str()
+    save_applications(applications)
+    flash('Entrevista eliminada.', 'success')
+    return redirect(url_for('application_detail', app_id=app_id))
+
+
+# --- Routes: Voice notes (nested) ---
+
+@app.route('/application/<app_id>/interview/<interview_id>/voice', methods=['POST'])
+def upload_voice(app_id, interview_id):
+    applications = load_applications()
+    application, interview = find_app_and_interview(applications, app_id, interview_id)
+    if not application or not interview:
         return jsonify({'error': 'Entrevista no encontrada'}), 404
 
     audio_file = request.files.get('audio')
@@ -268,49 +437,61 @@ def upload_voice(interview_id):
         ext = '.webm'
 
     filename = f"nota_{int(time.time() * 1000)}{ext}"
-    voice_dir = os.path.join(VOICE_DIR, interview_id)
-    os.makedirs(voice_dir, exist_ok=True)
-    audio_file.save(os.path.join(voice_dir, filename))
+    target_dir = voice_path(app_id, interview_id)
+    os.makedirs(target_dir, exist_ok=True)
+    audio_file.save(os.path.join(target_dir, filename))
 
     created_at = now_str()
-    interview['voice_notes'].append({
+    interview.setdefault('voice_notes', []).append({
         'filename': filename,
         'created_at': created_at,
     })
-    save_interviews(interviews)
+    interview['updated_at'] = created_at
+    application['updated_at'] = created_at
+    save_applications(applications)
 
     return jsonify({
         'filename': filename,
-        'url': url_for('serve_voice', interview_id=interview_id, filename=filename),
+        'url': url_for(
+            'serve_voice',
+            app_id=app_id,
+            interview_id=interview_id,
+            filename=filename,
+        ),
         'created_at': created_at,
     }), 201
 
 
-@app.route('/interview/<interview_id>/voice/<filename>', methods=['DELETE'])
-def delete_voice(interview_id, filename):
+@app.route(
+    '/application/<app_id>/interview/<interview_id>/voice/<filename>',
+    methods=['DELETE'],
+)
+def delete_voice(app_id, interview_id, filename):
     safe_filename = os.path.basename(filename)
-    interviews = load_interviews()
-    interview = find_by_id(interviews, interview_id)
-    if not interview:
+    applications = load_applications()
+    application, interview = find_app_and_interview(applications, app_id, interview_id)
+    if not application or not interview:
         return jsonify({'error': 'Entrevista no encontrada'}), 404
 
-    filepath = os.path.join(VOICE_DIR, interview_id, safe_filename)
+    filepath = os.path.join(voice_path(app_id, interview_id), safe_filename)
     if os.path.exists(filepath):
         os.remove(filepath)
 
     interview['voice_notes'] = [
-        vn for vn in interview['voice_notes']
+        vn for vn in interview.get('voice_notes', [])
         if vn['filename'] != safe_filename
     ]
-    save_interviews(interviews)
+    interview['updated_at'] = now_str()
+    application['updated_at'] = now_str()
+    save_applications(applications)
     return jsonify({'ok': True}), 200
 
 
-@app.route('/voice/<interview_id>/<filename>')
-def serve_voice(interview_id, filename):
+@app.route('/voice/<app_id>/<interview_id>/<filename>')
+def serve_voice(app_id, interview_id, filename):
     safe_filename = os.path.basename(filename)
-    voice_dir = os.path.join(VOICE_DIR, os.path.basename(interview_id))
-    return send_from_directory(voice_dir, safe_filename)
+    target_dir = voice_path(app_id, interview_id)
+    return send_from_directory(target_dir, safe_filename)
 
 
 if __name__ == '__main__':

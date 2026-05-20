@@ -1,0 +1,201 @@
+{% extends 'base.html' %}
+{% block title %}{{ application.empresa }} — HRtracker{% endblock %}
+
+{% block content %}
+
+{% set badge_colors = {
+  'Aplicado': 'secondary',
+  'Pantalla HR': 'info',
+  'Técnica': 'primary',
+  'Final': 'warning',
+  'Oferta': 'success',
+  'Rechazado': 'danger',
+  'Descartado': 'dark'
+} %}
+
+{# === Header card === #}
+<div class="card shadow-sm mb-3">
+  <div class="card-body">
+    <div class="d-flex flex-wrap justify-content-between align-items-start gap-2">
+      <div>
+        <h4 class="mb-0 fw-bold">{{ application.empresa }}</h4>
+        <p class="text-muted mb-2">{{ application.puesto }}</p>
+        <div class="d-flex flex-wrap align-items-center gap-2">
+          <span class="badge badge-etapa bg-{{ badge_colors.get(application.etapa, 'secondary') }} fs-6">
+            {{ application.etapa }}
+          </span>
+          <span class="rating-stars ms-2" data-app-id="{{ application.id }}" data-rating="{{ application.rating or 0 }}">
+            {% for i in range(1, 6) %}
+              <i class="fa-star {% if application.rating and i <= application.rating %}fas text-warning{% else %}far text-muted{% endif %}"
+                 data-value="{{ i }}" role="button"
+                 aria-label="{{ i }} estrella{% if i != 1 %}s{% endif %}"></i>
+            {% endfor %}
+            <i class="fas fa-times-circle text-muted clear-rating ms-1"
+               role="button" aria-label="Quitar rating"
+               style="{% if not application.rating %}display:none;{% endif %}"></i>
+          </span>
+        </div>
+      </div>
+      <div class="d-flex gap-2 flex-shrink-0">
+        <a href="{{ url_for('edit_application', app_id=application.id) }}"
+           class="btn btn-outline-secondary btn-sm">
+          <i class="fas fa-edit me-1"></i>Editar
+        </a>
+        <button type="button" class="btn btn-outline-danger btn-sm"
+                data-bs-toggle="modal" data-bs-target="#deleteModal">
+          <i class="fas fa-trash me-1"></i>Eliminar
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# === Info grid === #}
+<div class="row g-3 mb-3">
+
+  <div class="col-sm-6 col-md-4">
+    <div class="card h-100 shadow-sm">
+      <div class="card-body">
+        <p class="form-section-title mb-1">Modalidad</p>
+        <p class="mb-0 fw-semibold">
+          {% if application.modalidad %}
+            <i class="fas fa-map-marker-alt text-primary me-1"></i>{{ application.modalidad }}
+          {% else %}
+            <span class="text-muted">—</span>
+          {% endif %}
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-sm-6 col-md-4">
+    <div class="card h-100 shadow-sm">
+      <div class="card-body">
+        <p class="form-section-title mb-1">Salario</p>
+        <p class="mb-0 fw-semibold">
+          {% if application.salario_min or application.salario_max %}
+            <i class="fas fa-dollar-sign text-primary me-1"></i>
+            {% if application.salario_min %}{{ "{:,}".format(application.salario_min) }}{% endif %}
+            {% if application.salario_min and application.salario_max %} – {% endif %}
+            {% if application.salario_max %}{{ "{:,}".format(application.salario_max) }}{% endif %}
+          {% else %}
+            <span class="text-muted">—</span>
+          {% endif %}
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-sm-12 col-md-4">
+    <div class="card h-100 shadow-sm">
+      <div class="card-body">
+        <p class="form-section-title mb-1">Entrevistas</p>
+        <p class="mb-0 fw-semibold">
+          <i class="fas fa-comments text-primary me-1"></i>
+          {{ application.interviews|length }} registrada{% if application.interviews|length != 1 %}s{% endif %}
+        </p>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+{# === Application-level notes === #}
+{% if application.notas %}
+<div class="card shadow-sm mb-3">
+  <div class="card-body">
+    <p class="form-section-title">Notas</p>
+    <pre class="notes-text mb-0">{{ application.notas }}</pre>
+  </div>
+</div>
+{% endif %}
+
+{# === Interviews section === #}
+<div class="d-flex justify-content-between align-items-center mb-2 mt-4">
+  <h5 class="mb-0"><i class="fas fa-comments me-2 text-primary"></i>Entrevistas</h5>
+  <a href="{{ url_for('new_interview', app_id=application.id) }}" class="btn btn-primary btn-sm">
+    <i class="fas fa-plus me-1"></i>Agregar entrevista
+  </a>
+</div>
+
+{% if application.interviews %}
+  {% for iv in application.interviews %}
+    {% include '_interview_card.html' %}
+  {% endfor %}
+{% else %}
+  <div class="card shadow-sm">
+    <div class="card-body text-center py-4">
+      <i class="fas fa-comments fa-2x text-muted mb-2"></i>
+      <p class="text-muted mb-2">No hay entrevistas registradas todavía.</p>
+      <a href="{{ url_for('new_interview', app_id=application.id) }}" class="btn btn-outline-primary btn-sm">
+        <i class="fas fa-plus me-1"></i>Agregar la primera
+      </a>
+    </div>
+  </div>
+{% endif %}
+
+{# === Meta === #}
+<p class="text-muted small text-end mt-3">
+  Creada: {{ application.created_at }}
+  {% if application.updated_at != application.created_at %}
+    · Actualizada: {{ application.updated_at }}
+  {% endif %}
+</p>
+
+<a href="{{ url_for('index') }}" class="btn btn-outline-secondary btn-sm">
+  <i class="fas fa-arrow-left me-1"></i>Volver al listado
+</a>
+
+{# === Delete confirmation modal === #}
+<div class="modal fade" id="deleteModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title text-danger">
+          <i class="fas fa-exclamation-triangle me-2"></i>Eliminar postulación
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p>¿Estás segura de que querés eliminar la postulación en
+          <strong>{{ application.empresa }}</strong> para el puesto de
+          <strong>{{ application.puesto }}</strong>?</p>
+        <p class="text-danger small mb-0">
+          <i class="fas fa-exclamation-circle me-1"></i>
+          Esta acción no se puede deshacer. También se eliminarán todas las entrevistas
+          y notas de voz asociadas.
+        </p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <form method="POST" action="{{ url_for('delete_application', app_id=application.id) }}" class="d-inline">
+          <button type="submit" class="btn btn-danger">
+            <i class="fas fa-trash me-1"></i>Sí, eliminar
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/voice.js') }}"></script>
+<script src="{{ url_for('static', filename='js/rating.js') }}"></script>
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    initRatingStars();
+
+    // Initialize one voice recorder per interview card
+    {% for iv in application.interviews %}
+      initVoiceRecorder({{ application.id|tojson }}, {{ iv.id|tojson }}, {{ iv.id|tojson }});
+    {% endfor %}
+
+    // Wire delete handlers for pre-rendered voice notes
+    document.querySelectorAll('.delete-voice-btn').forEach(btn => {
+      btn.addEventListener('click', handleDeleteVoiceNote);
+    });
+  });
+</script>
+{% endblock %}
