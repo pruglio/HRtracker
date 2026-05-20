@@ -14,6 +14,7 @@ def app(tmp_path):
     app_module.DATA_FILE = str(tmp_path / 'applications.json')
     app_module.VOICE_DIR = str(tmp_path / 'voice_notes')
     yield flask_app
+    flask_app.config['TESTING'] = False
 
 
 @pytest.fixture
@@ -29,6 +30,7 @@ def app_with_one(client):
         'puesto': 'Dev',
         'etapa': 'Aplicado',
     }, follow_redirects=False)
+    assert rv.status_code == 302, f"Expected redirect, got {rv.status_code}: {rv.data}"
     # El redirect va a /application/<id>
     location = rv.headers['Location']
     app_id = location.rstrip('/').split('/')[-1]
