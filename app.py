@@ -176,22 +176,40 @@ def sort_key_latest_interview(application):
     return max(fechas) if fechas else (application.get('created_at', '') or '0000')
 
 
-def compute_proxima_entrevista(application, today_str):
+def is_future_interview(iv, now):
+    """Return True if the interview is in the future relative to `now` (a datetime object).
+
+    Rules:
+      - No fecha_entrevista → False
+      - fecha AND hora both set → parse as full datetime 'YYYY-MM-DD HH:MM', return dt > now
+        (if hora is malformed, fall back to date-only comparison)
+      - fecha only (no hora, or empty hora) → return fecha >= now.date().isoformat()
+    """
+    fecha = iv.get('fecha_entrevista')
+    if not fecha:
+        return False
+    hora = iv.get('hora_entrevista', '') or ''
+    if hora:
+        try:
+            interview_dt = datetime.strptime(f'{fecha} {hora}', '%Y-%m-%d %H:%M')
+            return interview_dt > now
+        except ValueError:
+            pass
+    return fecha >= now.date().isoformat()
+
+
+def compute_proxima_entrevista(application, now):
     """Return 'Coordinada', 'A coordinar', or 'Esperando' for an application.
 
-    today_str: ISO date string 'YYYY-MM-DD' for comparison (injected for testability).
+    now: datetime object for comparison (injected for testability).
     Rules:
-      - 'Coordinada'  → at least one interview with fecha >= today
+      - 'Coordinada'  → at least one interview that is_future_interview
       - 'A coordinar' → at least one interview without a date
-      - 'Esperando'   → no interviews, or all interviews have past dates
+      - 'Esperando'   → no interviews, or all interviews are in the past
     """
     interviews = application.get('interviews', [])
     has_undated = any(not iv.get('fecha_entrevista') for iv in interviews)
-    has_future = any(
-        iv.get('fecha_entrevista', '') >= today_str
-        for iv in interviews
-        if iv.get('fecha_entrevista')
-    )
+    has_future = any(is_future_interview(iv, now) for iv in interviews)
     if has_future:
         return 'Coordinada'
     if has_undated:
@@ -204,23 +222,22 @@ def compute_proxima_entrevista(application, today_str):
 @app.route('/')
 def index():
     applications = load_applications()
-    today_str = datetime.today().strftime('%Y-%m-%d')
+    now_dt = datetime.now()
 
     # Attach computed status to every application
     for a in applications:
-        a['proxima_entrevista'] = compute_proxima_entrevista(a, today_str)
+        a['proxima_entrevista'] = compute_proxima_entrevista(a, now_dt)
 
     # Build upcoming interviews panel from ALL applications (before filtering)
     upcoming_interviews = []
     for a in applications:
         for iv in a.get('interviews', []):
-            fecha = iv.get('fecha_entrevista', '')
-            if fecha and fecha >= today_str:
+            if is_future_interview(iv, now_dt):
                 upcoming_interviews.append({
                     'empresa': a['empresa'],
                     'puesto': a['puesto'],
                     'app_id': a['id'],
-                    'fecha': fecha,
+                    'fecha': iv.get('fecha_entrevista', ''),
                     'hora': iv.get('hora_entrevista', ''),
                     'entrevistador': iv.get('entrevistador_nombre', ''),
                 })
