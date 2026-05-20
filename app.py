@@ -25,6 +25,22 @@ ALLOWED_MODALIDADES = ['Remoto', 'Presencial', 'Híbrido']
 ALLOWED_EXTENSIONS = {'.webm', '.ogg', '.wav', '.mp4', '.m4a'}
 ALLOWED_RATINGS = {1, 2, 3, 4, 5}
 
+ALLOWED_BENEFICIOS = {
+    'obra_social', 'bono_anual', 'stock_options', 'home_office',
+    'horario_flexible', 'vacaciones_extra', 'vehiculo', 'comidas',
+}
+
+BENEFICIOS_LABELS = {
+    'obra_social': 'Obra social / prepaga',
+    'bono_anual': 'Bono anual',
+    'stock_options': 'Stock options / equity',
+    'home_office': 'Home office',
+    'horario_flexible': 'Horario flexible',
+    'vacaciones_extra': 'Vacaciones extra (+15 días)',
+    'vehiculo': 'Vehículo / transporte',
+    'comidas': 'Comidas / viáticos',
+}
+
 
 # --- Helpers ---
 
@@ -215,6 +231,8 @@ def create_application():
         'salario_min': parse_salary(request.form.get('salario_min')),
         'salario_max': parse_salary(request.form.get('salario_max')),
         'rating': parse_rating(request.form.get('rating')),
+        'beneficios': [b for b in request.form.getlist('beneficios') if b in ALLOWED_BENEFICIOS],
+        'beneficios_otros': request.form.get('beneficios_otros', '').strip(),
         'notas': request.form.get('notas', '').strip(),
         'interviews': [],
     }
@@ -277,6 +295,8 @@ def update_application(app_id):
     application['salario_min'] = parse_salary(request.form.get('salario_min'))
     application['salario_max'] = parse_salary(request.form.get('salario_max'))
     application['notas'] = request.form.get('notas', '').strip()
+    application['beneficios'] = [b for b in request.form.getlist('beneficios') if b in ALLOWED_BENEFICIOS]
+    application['beneficios_otros'] = request.form.get('beneficios_otros', '').strip()
     application['updated_at'] = now_str()
 
     save_applications(applications)
