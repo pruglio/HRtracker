@@ -6,3 +6,4 @@ itsdangerous==2.1.2
 click==8.1.7
 blinker==1.7.0
 gunicorn==21.2.0
+pytest==8.2.2
