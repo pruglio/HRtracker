@@ -334,6 +334,96 @@ def compute_heatmap(applications, today, weeks=12):
     return result
 
 
+PIPELINE_STAGES = ['Aplicado', 'Pantalla HR', 'Técnica', 'Final', 'Oferta']
+
+
+def compute_report_data(applications, now_dt):
+    """Compute all data needed for the /report page."""
+    from collections import defaultdict
+
+    today = now_dt.date()
+    fourteen_days = today + timedelta(days=14)
+    INACTIVE = {'Rechazado', 'Descartado'}
+
+    # Basic counts
+    total_apps = len(applications)
+    active_apps = sum(1 for a in applications if a.get('etapa') not in INACTIVE)
+    total_interviews = sum(len(a.get('interviews', [])) for a in applications)
+    if total_apps == 0:
+        response_rate = 0
+    else:
+        apps_with_interviews = sum(1 for a in applications if a.get('interviews'))
+        response_rate = int(apps_with_interviews * 100 / total_apps)
+
+    # Funnel
+    stage_counts = {}
+    for a in applications:
+        e = a.get('etapa', '')
+        stage_counts[e] = stage_counts.get(e, 0) + 1
+
+    first_count = stage_counts.get('Aplicado', 0) or 1
+    funnel = []
+    for stage in PIPELINE_STAGES:
+        count = stage_counts.get(stage, 0)
+        pct = round(count / first_count * 100) if first_count > 0 else 0
+        funnel.append({'etapa': stage, 'count': count, 'pct': pct})
+
+    # Upcoming interviews (next 14 days), sorted by date ASC
+    upcoming_with_key = []
+    for a in applications:
+        for iv in a.get('interviews', []):
+            fecha_str = iv.get('fecha_entrevista', '')
+            if not fecha_str:
+                continue
+            try:
+                iv_date = datetime.strptime(fecha_str, '%Y-%m-%d').date()
+            except Exception:
+                continue
+            if today <= iv_date <= fourteen_days:
+                upcoming_with_key.append((fecha_str, {
+                    'empresa': a['empresa'],
+                    'puesto': a['puesto'],
+                    'app_id': a['id'],
+                    'fecha_fmt': format_proxima_fecha(fecha_str),
+                    'hora': iv.get('hora_entrevista', ''),
+                    'entrevistador': iv.get('entrevistador_nombre', ''),
+                    'etapa': a.get('etapa', ''),
+                }))
+    upcoming_with_key.sort(key=lambda x: x[0])
+    upcoming = [x[1] for x in upcoming_with_key]
+
+    # By stage (active apps grouped)
+    stage_buckets = defaultdict(list)
+    for a in applications:
+        if a.get('etapa') not in INACTIVE:
+            stage_buckets[a.get('etapa', 'Sin etapa')].append(a)
+
+    by_stage = []
+    for stage in PIPELINE_STAGES:
+        if stage in stage_buckets:
+            by_stage.append({'etapa': stage, 'apps': stage_buckets[stage]})
+    for stage, apps in stage_buckets.items():
+        if stage not in PIPELINE_STAGES:
+            by_stage.append({'etapa': stage, 'apps': apps})
+
+    # High-value apps: Final + Oferta
+    high_value = [a for a in applications if a.get('etapa') in ('Final', 'Oferta')]
+
+    return {
+        'generated_at': now_dt.strftime('%d/%m/%Y %H:%M'),
+        'total_apps': total_apps,
+        'active_apps': active_apps,
+        'response_rate': response_rate,
+        'total_interviews': total_interviews,
+        'funnel': funnel,
+        'upcoming': upcoming,
+        'upcoming_count': len(upcoming),
+        'by_stage': by_stage,
+        'high_value': high_value,
+        'high_value_count': len(high_value),
+    }
+
+
 # --- Routes: Applications ---
 
 @app.route('/')
@@ -792,6 +882,42 @@ def serve_voice(app_id, interview_id, filename):
     result = supabase_client.storage.from_('voice-notes').create_signed_url(storage_path, 3600)
     signed_url = result.get('signedURL') or result.get('signedUrl', '')
     return redirect(signed_url)
+
+
+@app.route('/report')
+def report():
+    applications = load_applications()
+    now_dt = datetime.now()
+    today = now_dt.date()
+
+    # Attach proxima_entrevista and staleness to each app
+    for a in applications:
+        proxima = compute_proxima_entrevista(a, now_dt)
+        a['proxima_entrevista'] = proxima['status']
+        a['proxima_entrevista_label'] = (
+            format_proxima_fecha(proxima['next_fecha'], proxima['next_hora'])
+            if proxima['status'] == 'Coordinada' else ''
+        )
+        a['staleness_days'] = get_staleness_days(a, today)
+
+    # Compute needs_attention (same logic as index())
+    INACTIVE_ETAPAS = {'Rechazado', 'Descartado'}
+    needs_attention = []
+    for a in applications:
+        if a.get('etapa') in INACTIVE_ETAPAS:
+            continue
+        etapa = a.get('etapa', '')
+        proxima = a.get('proxima_entrevista', '')
+        staleness = a.get('staleness_days', 0)
+        if etapa == 'Aplicado' and staleness >= 7:
+            needs_attention.append(a)
+        elif etapa in ('Pantalla HR', 'Técnica', 'Final') and proxima == 'A coordinar':
+            needs_attention.append(a)
+
+    report_data = compute_report_data(applications, now_dt)
+    report_data['needs_attention'] = needs_attention
+
+    return render_template('report.html', **report_data)
 
 
 if __name__ == '__main__':

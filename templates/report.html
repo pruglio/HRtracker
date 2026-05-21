@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Reporte de estado — Entrevistas</title>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <style>
+    :root {
+      --ex-primary: #2563EB;
+      --ex-text: #0F172A;
+      --ex-muted: #64748B;
+      --ex-border: #E2E8F0;
+      --ex-surface: #fff;
+      --ex-bg: #F0F2F5;
+      --ex-radius: 12px;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Outfit', sans-serif;
+      background: var(--ex-bg);
+      color: var(--ex-text);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    /* ── Screen-only top bar ── */
+    .screen-bar {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: var(--ex-surface);
+      border-bottom: 1px solid var(--ex-border);
+      box-shadow: 0 2px 8px rgba(0,0,0,.06);
+      padding: 10px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .screen-bar-label {
+      font-size: 13px;
+      color: var(--ex-muted);
+      font-weight: 500;
+    }
+
+    .btn-print {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      background: var(--ex-primary);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 8px 16px;
+      font-family: 'Outfit', sans-serif;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background .15s;
+    }
+
+    .btn-print:hover {
+      background: #1D4ED8;
+    }
+
+    /* ── Report page wrapper ── */
+    .report-page {
+      max-width: 780px;
+      margin: 32px auto;
+      background: var(--ex-surface);
+      border-radius: var(--ex-radius);
+      box-shadow: 0 4px 24px rgba(0,0,0,.08);
+      padding: 40px;
+    }
+
+    /* ── Header ── */
+    .report-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding-bottom: 20px;
+      border-bottom: 1.5px solid var(--ex-border);
+      margin-bottom: 28px;
+    }
+
+    .header-brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand-icon {
+      width: 40px;
+      height: 40px;
+      background: var(--ex-primary);
+      border-radius: 9px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      font-size: 17px;
+      flex-shrink: 0;
+    }
+
+    .brand-text .brand-title {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--ex-text);
+      line-height: 1.2;
+    }
+
+    .brand-text .brand-subtitle {
+      font-size: 12px;
+      color: var(--ex-muted);
+      font-weight: 400;
+    }
+
+    .header-date {
+      font-size: 12px;
+      color: var(--ex-muted);
+      text-align: right;
+    }
+
+    /* ── Summary strip ── */
+    .summary-strip {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      margin-bottom: 28px;
+    }
+
+    .summary-card {
+      border: 1.5px solid var(--ex-border);
+      border-radius: 10px;
+      padding: 14px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .summary-label {
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--ex-muted);
+      text-transform: uppercase;
+      letter-spacing: .04em;
+    }
+
+    .summary-value {
+      font-size: 28px;
+      font-weight: 700;
+      line-height: 1;
+    }
+
+    .summary-value.blue   { color: var(--ex-primary); }
+    .summary-value.green  { color: #16A34A; }
+    .summary-value.amber  { color: #D97706; }
+    .summary-value.red    { color: #DC2626; }
+
+    /* ── Sections ── */
+    .report-section {
+      margin-bottom: 28px;
+    }
+
+    .section-header {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--ex-text);
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+    }
+
+    .section-header i {
+      font-size: 12px;
+      color: var(--ex-muted);
+    }
+
+    /* ── Funnel bars ── */
+    .funnel-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+
+    .funnel-label {
+      width: 100px;
+      flex-shrink: 0;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--ex-text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .funnel-bar-wrap {
+      flex: 1;
+      background: var(--ex-bg);
+      border-radius: 4px;
+      height: 10px;
+      overflow: hidden;
+    }
+
+    .funnel-bar {
+      height: 100%;
+      border-radius: 4px;
+      min-width: 4px;
+    }
+
+    .funnel-count {
+      width: 24px;
+      text-align: right;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--ex-text);
+    }
+
+    .funnel-pct {
+      width: 40px;
+      text-align: right;
+      font-size: 11px;
+      color: var(--ex-muted);
+    }
+
+    /* ── Compact tables ── */
+    .compact-table {
+      width: 100%;
+      border: 1.5px solid var(--ex-border);
+      border-radius: 8px;
+      overflow: hidden;
+      border-collapse: separate;
+      border-spacing: 0;
+      font-size: 12px;
+    }
+
+    .compact-table thead tr {
+      background: var(--ex-bg);
+    }
+
+    .compact-table thead th {
+      padding: 8px 12px;
+      font-size: 10.5px;
+      font-weight: 600;
+      color: var(--ex-muted);
+      text-transform: uppercase;
+      letter-spacing: .04em;
+      border-bottom: 1.5px solid var(--ex-border);
+      text-align: left;
+    }
+
+    .compact-table tbody tr:nth-child(even) {
+      background: #F8FAFC;
+    }
+
+    .compact-table tbody tr:nth-child(odd) {
+      background: var(--ex-surface);
+    }
+
+    .compact-table tbody td {
+      padding: 9px 12px;
+      color: var(--ex-text);
+      vertical-align: middle;
+    }
+
+    .compact-table tbody td.muted {
+      color: var(--ex-muted);
+    }
+
+    .col-empresa {
+      font-weight: 600;
+    }
+
+    .col-puesto {
+      font-size: 11px;
+      color: var(--ex-muted);
+    }
+
+    /* ── Stage badge ── */
+    .stage-badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 20px;
+      font-size: 10.5px;
+      font-weight: 600;
+      background: var(--ex-bg);
+      color: var(--ex-muted);
+      white-space: nowrap;
+    }
+
+    /* ── Staleness chip ── */
+    .stale-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 11.5px;
+      font-weight: 600;
+      color: #EF4444;
+    }
+
+    /* ── By-stage group ── */
+    .stage-group {
+      margin-bottom: 20px;
+    }
+
+    .stage-group-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+
+    .stage-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .stage-group-name {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--ex-text);
+    }
+
+    .stage-count-badge {
+      font-size: 10px;
+      font-weight: 600;
+      background: var(--ex-bg);
+      color: var(--ex-muted);
+      padding: 1px 6px;
+      border-radius: 10px;
+      border: 1px solid var(--ex-border);
+    }
+
+    /* ── Footer ── */
+    .report-footer {
+      margin-top: 32px;
+      padding-top: 16px;
+      border-top: 1px solid var(--ex-border);
+      text-align: center;
+      font-size: 11px;
+      color: var(--ex-muted);
+    }
+
+    /* ── Rating stars ── */
+    .rating-stars {
+      color: #FBBF24;
+      font-size: 10px;
+      letter-spacing: 1px;
+    }
+
+    /* ── Salary ── */
+    .salary-text {
+      font-size: 11px;
+      color: var(--ex-muted);
+      white-space: nowrap;
+    }
+
+    /* ── Print ── */
+    @media print {
+      .screen-only { display: none !important; }
+      body { background: white; }
+      .report-page {
+        margin: 0;
+        padding: 20px;
+        box-shadow: none;
+        border-radius: 0;
+        max-width: 100%;
+      }
+      .report-section { page-break-inside: avoid; }
+      .section-header { page-break-after: avoid; }
+      .stage-group { page-break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Screen-only top bar -->
+  <div class="screen-bar screen-only">
+    <span class="screen-bar-label"><i class="fas fa-eye" style="margin-right:6px;"></i>Vista previa del reporte</span>
+    <button class="btn-print" onclick="window.print()">
+      <i class="fas fa-print"></i> Imprimir / Guardar PDF
+    </button>
+  </div>
+
+  <!-- Report page -->
+  <div class="report-page">
+
+    <!-- 1. Header -->
+    <div class="report-header">
+      <div class="header-brand">
+        <div class="brand-icon">
+          <i class="fas fa-briefcase"></i>
+        </div>
+        <div class="brand-text">
+          <div class="brand-title">Entrevistas</div>
+          <div class="brand-subtitle">Reporte de estado</div>
+        </div>
+      </div>
+      <div class="header-date">
+        <i class="fas fa-clock" style="margin-right:4px;"></i>{{ generated_at }}
+      </div>
+    </div>
+
+    <!-- 2. Summary strip -->
+    <div class="summary-strip">
+      <div class="summary-card">
+        <span class="summary-label">Activas</span>
+        <span class="summary-value blue">{{ active_apps }}</span>
+      </div>
+      <div class="summary-card">
+        <span class="summary-label">Respuesta</span>
+        <span class="summary-value {% if response_rate >= 30 %}green{% elif response_rate >= 15 %}amber{% else %}red{% endif %}">{{ response_rate }}%</span>
+      </div>
+      <div class="summary-card">
+        <span class="summary-label">Próximas</span>
+        <span class="summary-value amber">{{ upcoming_count }}</span>
+      </div>
+      <div class="summary-card">
+        <span class="summary-label">Etapa final</span>
+        <span class="summary-value green">{{ high_value_count }}</span>
+      </div>
+    </div>
+
+    <!-- 3. Funnel -->
+    <div class="report-section">
+      <div class="section-header">
+        <i class="fas fa-filter"></i> El embudo
+      </div>
+      {% set bar_colors = {
+        'Aplicado':    '#94A3B8',
+        'Pantalla HR': '#38BDF8',
+        'Técnica':     '#60A5FA',
+        'Final':       '#FBBF24',
+        'Oferta':      '#4ADE80'
+      } %}
+      {% for item in funnel %}
+        {% if item.count > 0 %}
+        <div class="funnel-row">
+          <div class="funnel-label" title="{{ item.etapa }}">{{ item.etapa }}</div>
+          <div class="funnel-bar-wrap">
+            <div class="funnel-bar"
+                 style="width: {{ item.pct }}%; background: {{ bar_colors.get(item.etapa, '#94A3B8') }};"></div>
+          </div>
+          <div class="funnel-count">{{ item.count }}</div>
+          <div class="funnel-pct">({{ item.pct }}%)</div>
+        </div>
+        {% endif %}
+      {% endfor %}
+    </div>
+
+    <!-- 4. Upcoming interviews -->
+    {% if upcoming %}
+    <div class="report-section">
+      <div class="section-header">
+        <i class="fas fa-calendar-check"></i> Próximas entrevistas (14 días)
+      </div>
+      <table class="compact-table">
+        <thead>
+          <tr>
+            <th>Empresa / Puesto</th>
+            <th>Etapa</th>
+            <th>Fecha y hora</th>
+            <th>Entrevistador</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in upcoming %}
+          <tr>
+            <td>
+              <div class="col-empresa">{{ item.empresa }}</div>
+              <div class="col-puesto">{{ item.puesto }}</div>
+            </td>
+            <td><span class="stage-badge">{{ item.etapa }}</span></td>
+            <td class="muted">
+              {{ item.fecha_fmt }}{% if item.hora %}<br><span style="font-size:11px;">{{ item.hora }}</span>{% endif %}
+            </td>
+            <td class="muted">
+              {% if item.entrevistador %}{{ item.entrevistador }}{% else %}&mdash;{% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+
+    <!-- 5. Needs attention -->
+    {% if needs_attention %}
+    <div class="report-section">
+      <div class="section-header">
+        <i class="fas fa-exclamation-circle" style="color:#EF4444;"></i> Necesitan atención
+      </div>
+      <table class="compact-table">
+        <thead>
+          <tr>
+            <th>Empresa</th>
+            <th>Etapa</th>
+            <th>Sin actividad</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for app in needs_attention %}
+          <tr>
+            <td>
+              <div class="col-empresa">{{ app.empresa }}</div>
+              <div class="col-puesto">{{ app.puesto }}</div>
+            </td>
+            <td><span class="stage-badge">{{ app.etapa }}</span></td>
+            <td>
+              <span class="stale-chip">
+                <i class="fas fa-hourglass-half"></i>
+                {{ app.staleness_days }}d
+              </span>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+
+    <!-- 6. All active apps grouped by stage -->
+    {% if by_stage %}
+    <div class="report-section">
+      <div class="section-header">
+        <i class="fas fa-list"></i> Postulaciones activas
+      </div>
+      {% set dot_colors = {
+        'Aplicado':    '#94A3B8',
+        'Pantalla HR': '#38BDF8',
+        'Técnica':     '#60A5FA',
+        'Final':       '#FBBF24',
+        'Oferta':      '#4ADE80'
+      } %}
+      {% for group in by_stage %}
+      {% if group.apps %}
+      <div class="stage-group">
+        <div class="stage-group-header">
+          <div class="stage-dot"
+               style="background: {{ dot_colors.get(group.etapa, '#94A3B8') }};"></div>
+          <span class="stage-group-name">{{ group.etapa }}</span>
+          <span class="stage-count-badge">{{ group.apps | length }}</span>
+        </div>
+        <table class="compact-table">
+          <thead>
+            <tr>
+              <th>Empresa</th>
+              <th>Puesto</th>
+              <th>Modalidad</th>
+              <th>Salario</th>
+              <th>Próxima</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for app in group.apps %}
+            <tr>
+              <td class="col-empresa">{{ app.empresa }}</td>
+              <td>{{ app.puesto }}</td>
+              <td class="muted">
+                {% if app.modalidad %}{{ app.modalidad }}{% else %}&mdash;{% endif %}
+              </td>
+              <td>
+                {% if app.salario_min or app.salario_max %}
+                <span class="salary-text">
+                  {% if app.salario_min and app.salario_max %}
+                    ${{ app.salario_min | int }}–{{ app.salario_max | int }}k
+                  {% elif app.salario_min %}
+                    desde ${{ app.salario_min | int }}k
+                  {% else %}
+                    hasta ${{ app.salario_max | int }}k
+                  {% endif %}
+                </span>
+                {% else %}
+                <span class="muted">&mdash;</span>
+                {% endif %}
+              </td>
+              <td class="muted" style="font-size:11px;">
+                {% if app.proxima_entrevista_label %}
+                  {{ app.proxima_entrevista_label }}
+                {% else %}
+                  &mdash;
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% endif %}
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- 7. Footer -->
+    <div class="report-footer">
+      <i class="fas fa-briefcase" style="margin-right:5px;"></i>
+      Generado el {{ generated_at }} &middot; Entrevistas
+    </div>
+
+  </div><!-- /report-page -->
+
+</body>
+</html>
