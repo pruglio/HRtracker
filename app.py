@@ -1,7 +1,7 @@
 import os
 import time
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
 
 from flask import (Flask, abort, flash, jsonify, redirect, render_template,
@@ -246,6 +246,94 @@ def format_proxima_fecha(fecha, hora=''):
         return fecha
 
 
+def get_staleness_days(app_entry, today):
+    """Return days since last activity on this application."""
+    best = None
+    for key in ('updated_at', 'created_at'):
+        s = app_entry.get(key)
+        if not s:
+            continue
+        try:
+            d = datetime.strptime(s[:10], '%Y-%m-%d').date()
+            if best is None or d > best:
+                best = d
+        except (ValueError, TypeError):
+            continue
+    if best is None:
+        return 0
+    return (today - best).days
+
+
+def compute_activity_stats(applications):
+    """Return dict with total_apps, total_interviews, response_rate."""
+    total_apps = len(applications)
+    total_interviews = sum(len(a.get('interviews', [])) for a in applications)
+    if total_apps == 0:
+        response_rate = 0
+    else:
+        apps_with_interviews = sum(1 for a in applications if a.get('interviews'))
+        response_rate = int(apps_with_interviews * 100 / total_apps)
+    return {
+        'total_apps': total_apps,
+        'total_interviews': total_interviews,
+        'response_rate': response_rate,
+    }
+
+
+def compute_heatmap(applications, today, weeks=12):
+    """Return a 12×7 nested list of activity counts (week × day, Mon=0)."""
+    days = weeks * 7  # 84
+    start_date = today - timedelta(days=days - 1)
+
+    counts = {}
+    for i in range(days):
+        d = start_date + timedelta(days=i)
+        counts[d.isoformat()] = 0
+
+    for a in applications:
+        # App created
+        created = a.get('created_at')
+        if created:
+            try:
+                d_str = created[:10]
+                if d_str in counts:
+                    counts[d_str] += 1
+            except (TypeError, ValueError):
+                pass
+
+        # Interviews
+        for iv in a.get('interviews', []):
+            iv_created = iv.get('created_at')
+            if iv_created:
+                try:
+                    d_str = iv_created[:10]
+                    if d_str in counts:
+                        counts[d_str] += 1
+                except (TypeError, ValueError):
+                    pass
+            else:
+                # fallback: fecha_entrevista date
+                fecha = iv.get('fecha_entrevista')
+                if fecha:
+                    try:
+                        d_str = fecha[:10]
+                        if d_str in counts:
+                            counts[d_str] += 1
+                    except (TypeError, ValueError):
+                        pass
+
+    # Reshape into 12×7
+    result = []
+    for w in range(weeks):
+        week_row = []
+        for d in range(7):
+            day_offset = w * 7 + d
+            day_date = start_date + timedelta(days=day_offset)
+            week_row.append(counts.get(day_date.isoformat(), 0))
+        result.append(week_row)
+    return result
+
+
 # --- Routes: Applications ---
 
 @app.route('/')
@@ -273,6 +361,52 @@ def index():
                     'entrevistador': iv.get('entrevistador_nombre', ''),
                 })
     upcoming_interviews.sort(key=lambda x: (x['fecha'], x['hora'] or '99:99'))
+
+    today = now_dt.date()
+
+    # Urgent interview: first upcoming interview that is today or tomorrow
+    urgent_iv = None
+    tomorrow = today + timedelta(days=1)
+    for iv_entry in upcoming_interviews:
+        iv_date_str = iv_entry['fecha']
+        try:
+            iv_date = datetime.strptime(iv_date_str, '%Y-%m-%d').date()
+        except (ValueError, TypeError):
+            continue
+        if iv_date <= tomorrow:
+            urgent_iv = iv_entry
+            break
+
+    # Group active applications (before filters, always show all active)
+    INACTIVE_ETAPAS = {'Rechazado', 'Descartado'}
+    active_apps = [a for a in applications if a.get('etapa') not in INACTIVE_ETAPAS]
+
+    needs_attention = []
+    this_week = []
+    al_dia = []
+
+    for a in active_apps:
+        staleness = get_staleness_days(a, today)
+        a['staleness_days'] = staleness
+        proxima = a.get('proxima_entrevista', '')
+        etapa = a.get('etapa', '')
+
+        if proxima == 'Coordinada':
+            this_week.append(a)
+        elif etapa in ('Aplicado',) and staleness >= 7:
+            needs_attention.append(a)
+        elif etapa in ('Pantalla HR', 'Técnica', 'Final') and proxima == 'A coordinar':
+            needs_attention.append(a)
+        else:
+            al_dia.append(a)
+
+    # Sidebar: first upcoming interview app
+    next_iv_app = None
+    if this_week:
+        next_iv_app = this_week[0]
+
+    activity_stats = compute_activity_stats(applications)
+    heatmap_weeks = compute_heatmap(applications, today)
 
     f_etapa = request.args.get('etapa', '').strip()
     f_empresa = request.args.get('empresa', '').strip()
@@ -308,6 +442,14 @@ def index():
         f_desde=f_desde,
         f_hasta=f_hasta,
         upcoming_interviews=upcoming_interviews,
+        urgent_iv=urgent_iv,
+        needs_attention=needs_attention,
+        this_week=this_week,
+        al_dia=al_dia,
+        next_iv_app=next_iv_app,
+        activity_stats=activity_stats,
+        heatmap_weeks=heatmap_weeks,
+        today_str=today.strftime('%Y-%m-%d'),
     )
 
 

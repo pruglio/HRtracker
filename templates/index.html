@@ -3,7 +3,7 @@
 
 {% block content %}
 
-{# Etapa → color badge #}
+{# Badge colors helper #}
 {% set badge_colors = {
   'Aplicado': 'secondary',
   'Pantalla HR': 'info',
@@ -14,53 +14,51 @@
   'Descartado': 'dark'
 } %}
 
+{# Staleness helpers (Jinja macros) #}
+{% macro staleness_bar(days) %}
+  {% set pct = [days / 21 * 100, 100]|min|int %}
+  {% if days <= 7 %}{% set cls = 'staleness-green' %}
+  {% elif days <= 14 %}{% set cls = 'staleness-amber' %}
+  {% else %}{% set cls = 'staleness-red' %}{% endif %}
+  <div class="staleness-bar-wrap">
+    <div class="staleness-track">
+      <div class="staleness-fill {{ cls }}" style="width:{{ pct }}%;"></div>
+    </div>
+  </div>
+{% endmacro %}
+
+{# ---- PAGE HEADER ---- #}
 <div class="page-header">
   <div class="page-title">Postulaciones</div>
   <div class="d-flex gap-2">
-    <a href="{{ url_for('new_interview_global') }}" class="btn btn-outline-primary">
+    <a href="{{ url_for('new_interview_global') }}" class="btn btn-outline-primary btn-sm">
       <i class="fas fa-calendar-plus me-1"></i>Nueva entrevista
     </a>
-    <a href="{{ url_for('new_application') }}" class="btn btn-primary">
+    <a href="{{ url_for('new_application') }}" class="btn btn-primary btn-sm">
       <i class="fas fa-plus me-1"></i>Nueva postulación
     </a>
   </div>
 </div>
 
-{# --- Upcoming interviews panel --- #}
-{% if upcoming_interviews %}
-<div class="card shadow-sm mb-4">
-  <div class="card-header">
-    <div class="upcoming-panel-header">
-      <div class="upcoming-panel-dot"></div>
-      Próximas entrevistas
+{# ---- URGENCY BANNER ---- #}
+{% if urgent_iv %}
+<div class="urgency-banner">
+  <div class="urgency-banner-icon"><i class="fas fa-bell"></i></div>
+  <div class="urgency-banner-body">
+    <div class="urgency-banner-title">
+      Entrevista {% if urgent_iv.fecha == today_str %}hoy{% else %}mañana{% endif %} — {{ urgent_iv.empresa }}
+    </div>
+    <div class="urgency-banner-sub">
+      {{ urgent_iv.puesto }}{% if urgent_iv.hora %} · {{ urgent_iv.hora }}{% endif %}{% if urgent_iv.entrevistador %} con {{ urgent_iv.entrevistador }}{% endif %}
     </div>
   </div>
-  <div class="card-body p-0">
-    <table class="table table-sm table-hover mb-0 align-middle upcoming-panel">
-      <tbody>
-        {% for iv in upcoming_interviews %}
-        <tr>
-          <td class="ps-3">
-            <a href="{{ url_for('application_detail', app_id=iv.app_id) }}"
-               class="fw-semibold text-decoration-none text-dark">{{ iv.empresa }}</a>
-            <br><small class="text-muted">{{ iv.puesto }}</small>
-          </td>
-          <td class="text-nowrap">
-            <i class="fas fa-calendar-alt text-primary me-1"></i>
-            {{ iv.fecha }}{% if iv.hora %} {{ iv.hora }}{% endif %}
-          </td>
-          <td class="text-muted small">
-            {% if iv.entrevistador %}<i class="fas fa-user me-1"></i>{{ iv.entrevistador }}{% else %}—{% endif %}
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
+  <a href="{{ url_for('application_detail', app_id=urgent_iv.app_id) }}" class="urgency-banner-cta">
+    <i class="fas fa-arrow-right me-1"></i>Ver detalle
+  </a>
 </div>
 {% endif %}
 
-{# --- Filter card --- #}
+{# ---- FILTER (collapsible) ---- #}
 {% set filters_active = f_etapa or f_empresa or f_desde or f_hasta %}
 <div class="card filter-card mb-4">
   <div class="card-header py-2 px-3" style="cursor:pointer;"
@@ -114,200 +112,238 @@
   </div>
 </div>
 
-{# --- Summary --- #}
-<p class="text-muted small mb-2">
-  Mostrando <strong>{{ applications|length }}</strong>
-  {% if applications|length != total %}de {{ total }}{% endif %}
-  postulaci{% if total == 1 %}ón{% else %}ones{% endif %}
-</p>
+{# ---- MAIN GRID ---- #}
+{% if needs_attention or this_week or al_dia %}
 
-{% if applications %}
+<div class="centro-layout">
 
-  {# --- Desktop table --- #}
-  <div class="d-none d-md-block">
-    <div class="card shadow-sm">
-      <div class="table-responsive">
-        <table class="table table-hover mb-0 align-middle">
-          <thead class="table-light">
-            <tr>
-              <th>Empresa / Puesto</th>
-              <th>Etapa</th>
-              <th>Próxima entrevista</th>
-              <th>Rating</th>
-              <th>Modalidad</th>
-              <th>Salario</th>
-              <th class="text-center" title="Cantidad de entrevistas">
-                <i class="fas fa-comments"></i>
-              </th>
-              <th class="text-end">Acciones</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for app in applications %}
-            <tr>
-              <td>
-                <a href="{{ url_for('application_detail', app_id=app.id) }}"
-                   class="fw-semibold text-decoration-none text-dark">
-                  {{ app.empresa }}
-                </a>
-                <br>
-                <small class="text-muted">{{ app.puesto }}</small>
-              </td>
-              <td>
-                <span class="badge badge-etapa bg-{{ badge_colors.get(app.etapa, 'secondary') }}">
-                  {{ app.etapa }}
-                </span>
-              </td>
-              <td>
-                {% set proxima = app.proxima_entrevista %}
-                {% if proxima == 'Coordinada' %}
-                  <span class="badge bg-success">Coordinada</span>
-                  {% if app.proxima_entrevista_label %}<br><small class="text-muted">{{ app.proxima_entrevista_label }}</small>{% endif %}
-                {% elif proxima == 'A coordinar' %}
-                  <span class="badge bg-warning text-dark">A coordinar</span>
-                {% else %}
-                  <span class="badge bg-secondary">Esperando</span>
-                {% endif %}
-              </td>
-              <td>
-                <span class="rating-stars" data-app-id="{{ app.id }}" data-rating="{{ app.rating or 0 }}">
-                  {% for i in range(1, 6) %}
-                    <i class="fa-star {% if app.rating and i <= app.rating %}fas text-warning{% else %}far text-muted{% endif %}"
-                       data-value="{{ i }}" role="button" aria-label="{{ i }} estrella{% if i != 1 %}s{% endif %}"></i>
-                  {% endfor %}
-                  <i class="fas fa-times-circle text-muted clear-rating ms-1"
-                     role="button" aria-label="Quitar rating"
-                     style="{% if not app.rating %}display:none;{% endif %}"></i>
-                </span>
-              </td>
-              <td>
-                {% if app.modalidad %}
-                  <span class="modalidad-tag modalidad-{{ app.modalidad | lower | replace(' ', '') }}">{{ app.modalidad }}</span>
-                {% else %}
-                  <small class="text-muted">—</small>
-                {% endif %}
-              </td>
-              <td>
-                <small>
-                {% if app.salario_min or app.salario_max %}
-                  {% if app.salario_min %}{{ "{:,}".format(app.salario_min) }}{% endif %}
-                  {% if app.salario_min and app.salario_max %} – {% endif %}
-                  {% if app.salario_max %}{{ "{:,}".format(app.salario_max) }}{% endif %}
-                {% else %}
-                  —
-                {% endif %}
-                </small>
-              </td>
-              <td class="text-center">
-                <small class="text-muted">{{ app.interviews|length }}</small>
-              </td>
-              <td class="text-end">
-                <a href="{{ url_for('application_detail', app_id=app.id) }}"
-                   class="btn btn-sm btn-outline-primary me-1" title="Ver detalle">
-                  <i class="fas fa-eye"></i>
-                </a>
-                <a href="{{ url_for('edit_application', app_id=app.id) }}"
-                   class="btn btn-sm btn-outline-secondary" title="Editar">
-                  <i class="fas fa-edit"></i>
-                </a>
-              </td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
+  {# ===== MAIN COLUMN ===== #}
+  <div class="centro-main">
+
+    {# --- Necesitan atención --- #}
+    {% if needs_attention %}
+    <div class="accion-section">
+      <div class="accion-section-header">
+        <div class="accion-section-dot dot-red"></div>
+        Necesitan atención
       </div>
-    </div>
-  </div>
-
-  {# --- Mobile cards --- #}
-  <div class="d-md-none">
-    {% for app in applications %}
-    <div class="card interview-card mb-3">
-      <div class="card-body">
-        <div class="d-flex justify-content-between align-items-start mb-1">
-          <div>
-            <a href="{{ url_for('application_detail', app_id=app.id) }}"
-               class="fw-semibold text-decoration-none text-dark fs-6">
-              {{ app.empresa }}
-            </a>
-            <div class="text-muted small">{{ app.puesto }}</div>
+      <div class="accion-card">
+        {% for app in needs_attention %}
+        <div class="accion-item">
+          <div class="accion-item-main">
+            <a href="{{ url_for('application_detail', app_id=app.id) }}" class="accion-empresa">{{ app.empresa }}</a>
+            <div class="accion-puesto">{{ app.puesto }}</div>
+            <div class="accion-meta">
+              <span class="accion-etapa-tag">{{ app.etapa }}</span>
+              <span class="accion-staleness">
+                <i class="fas fa-clock me-1" style="font-size:10px;"></i>
+                {% if app.staleness_days == 0 %}Hoy{% else %}{{ app.staleness_days }}d sin actividad{% endif %}
+              </span>
+            </div>
           </div>
-          <span class="badge badge-etapa bg-{{ badge_colors.get(app.etapa, 'secondary') }} ms-2 flex-shrink-0">
-            {{ app.etapa }}
-          </span>
+          {{ staleness_bar(app.staleness_days) }}
+          <div class="accion-actions">
+            {% if app.proxima_entrevista == 'A coordinar' %}
+            <a href="{{ url_for('new_interview', app_id=app.id) }}" class="accion-btn accion-btn-primary">
+              <i class="fas fa-calendar-plus me-1"></i>Coordinar
+            </a>
+            {% else %}
+            <a href="{{ url_for('application_detail', app_id=app.id) }}" class="accion-btn">
+              <i class="fas fa-arrow-right me-1"></i>Seguimiento
+            </a>
+            {% endif %}
+          </div>
         </div>
-        <div class="mt-1">
-          {% set proxima = app.proxima_entrevista %}
-          {% if proxima == 'Coordinada' %}
-            <span class="badge bg-success">Coordinada</span>
-            {% if app.proxima_entrevista_label %}<br><small class="text-muted">{{ app.proxima_entrevista_label }}</small>{% endif %}
-          {% elif proxima == 'A coordinar' %}
-            <span class="badge bg-warning text-dark">A coordinar</span>
-          {% else %}
-            <span class="badge bg-secondary">Esperando</span>
-          {% endif %}
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+    {# --- Esta semana --- #}
+    {% if this_week %}
+    <div class="accion-section">
+      <div class="accion-section-header">
+        <div class="accion-section-dot dot-blue"></div>
+        Esta semana
+      </div>
+      <div class="accion-card">
+        {% for app in this_week %}
+        <div class="accion-item">
+          <div class="accion-item-main">
+            <a href="{{ url_for('application_detail', app_id=app.id) }}" class="accion-empresa">{{ app.empresa }}</a>
+            <div class="accion-puesto">{{ app.puesto }}</div>
+            <div class="accion-iv-date">
+              <i class="fas fa-check-circle"></i>
+              {{ app.proxima_entrevista_label or 'Coordinada' }}
+            </div>
+          </div>
+          <div class="accion-actions">
+            <a href="{{ url_for('application_detail', app_id=app.id) }}" class="accion-btn accion-btn-primary">
+              <i class="fas fa-arrow-right me-1"></i>Preparar
+            </a>
+          </div>
         </div>
-        <div class="mt-1">
-          <span class="rating-stars" data-app-id="{{ app.id }}" data-rating="{{ app.rating or 0 }}">
-            {% for i in range(1, 6) %}
-              <i class="fa-star {% if app.rating and i <= app.rating %}fas text-warning{% else %}far text-muted{% endif %}"
-                 data-value="{{ i }}" role="button" aria-label="{{ i }} estrellas"></i>
-            {% endfor %}
-            <i class="fas fa-times-circle text-muted clear-rating ms-1"
-               role="button" aria-label="Quitar rating"
-               style="{% if not app.rating %}display:none;{% endif %}"></i>
-          </span>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+    {# --- Al día --- #}
+    {% if al_dia %}
+    <div class="accion-section">
+      <div class="accion-section-header">
+        <div class="accion-section-dot dot-green"></div>
+        Al día
+      </div>
+      <div class="accion-card">
+        {% for app in al_dia %}
+        <div class="accion-item">
+          <div class="accion-item-main">
+            <a href="{{ url_for('application_detail', app_id=app.id) }}" class="accion-empresa">{{ app.empresa }}</a>
+            <div class="accion-puesto">{{ app.puesto }}</div>
+            <div class="accion-meta">
+              <span class="accion-etapa-tag">{{ app.etapa }}</span>
+              {% if app.staleness_days > 0 %}
+              <span class="accion-staleness">{{ app.staleness_days }}d</span>
+              {% endif %}
+            </div>
+          </div>
+          <div class="accion-actions">
+            <a href="{{ url_for('application_detail', app_id=app.id) }}" class="accion-btn">
+              <i class="fas fa-eye me-1"></i>Ver
+            </a>
+          </div>
         </div>
-        <div class="d-flex flex-wrap gap-2 mt-2 small text-muted">
-          {% if app.modalidad %}
-            <span><i class="fas fa-map-marker-alt me-1"></i>{{ app.modalidad }}</span>
-          {% endif %}
-          <span><i class="fas fa-comments me-1"></i>{{ app.interviews|length }} entrevista{% if app.interviews|length != 1 %}s{% endif %}</span>
-          {% if app.salario_min or app.salario_max %}
-            <span>
-              <i class="fas fa-dollar-sign me-1"></i>
-              {% if app.salario_min %}{{ "{:,}".format(app.salario_min) }}{% endif %}
-              {% if app.salario_min and app.salario_max %}–{% endif %}
-              {% if app.salario_max %}{{ "{:,}".format(app.salario_max) }}{% endif %}
-            </span>
-          {% endif %}
-        </div>
-        <div class="d-flex gap-2 mt-2">
-          <a href="{{ url_for('application_detail', app_id=app.id) }}"
-             class="btn btn-sm btn-outline-primary flex-grow-1">
-            <i class="fas fa-eye me-1"></i>Ver
-          </a>
-          <a href="{{ url_for('edit_application', app_id=app.id) }}"
-             class="btn btn-sm btn-outline-secondary flex-grow-1">
-            <i class="fas fa-edit me-1"></i>Editar
-          </a>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+    {# --- Inactive apps (collapsed by default) --- #}
+    {% set inactive = applications | selectattr('etapa', 'in', ['Rechazado', 'Descartado', 'Oferta']) | list %}
+    {% if inactive %}
+    <div class="accion-section">
+      <div class="accion-section-header" style="cursor:pointer;" data-bs-toggle="collapse" data-bs-target="#inactiveBody">
+        <div class="accion-section-dot" style="background:var(--ex-border);"></div>
+        Cerradas / Oferta ({{ inactive|length }})
+        <i class="fas fa-chevron-down filter-chevron ms-auto"></i>
+      </div>
+      <div class="collapse" id="inactiveBody">
+        <div class="accion-card">
+          {% for app in inactive %}
+          <div class="accion-item">
+            <div class="accion-item-main">
+              <a href="{{ url_for('application_detail', app_id=app.id) }}" class="accion-empresa">{{ app.empresa }}</a>
+              <div class="accion-puesto">{{ app.puesto }}</div>
+              <div class="accion-meta">
+                <span class="badge bg-{{ badge_colors.get(app.etapa, 'secondary') }}">{{ app.etapa }}</span>
+              </div>
+            </div>
+            <div class="accion-actions">
+              <a href="{{ url_for('application_detail', app_id=app.id) }}" class="accion-btn">
+                <i class="fas fa-eye me-1"></i>Ver
+              </a>
+            </div>
+          </div>
+          {% endfor %}
         </div>
       </div>
     </div>
-    {% endfor %}
-  </div>
+    {% endif %}
+
+  </div>{# end centro-main #}
+
+  {# ===== SIDEBAR ===== #}
+  <div class="centro-sidebar">
+
+    {# Next interview #}
+    {% if next_iv_app %}
+    <div class="sidebar-card">
+      <div class="sidebar-card-header">
+        <i class="fas fa-calendar-check"></i> Próxima entrevista
+      </div>
+      <div class="sidebar-card-body">
+        <div class="next-iv-company">{{ next_iv_app.empresa }}</div>
+        <div class="next-iv-role">{{ next_iv_app.puesto }}</div>
+        <div class="next-iv-when">
+          <i class="fas fa-clock"></i>
+          {{ next_iv_app.proxima_entrevista_label or 'Coordinada' }}
+        </div>
+        <div id="prepChecklist" class="mt-3" data-app-id="{{ next_iv_app.id }}">
+          {% set prep_items = [
+            ('Revisar descripción del puesto', 'jd'),
+            ('Investigar la empresa', 'co'),
+            ('Preparar preguntas para el entrevistador', 'q'),
+            ('Revisar notas de entrevistas anteriores', 'notes')
+          ] %}
+          {% for label, key in prep_items %}
+          <div class="prep-item" data-key="{{ key }}">
+            <div class="prep-check"><i class="fas fa-check" style="font-size:8px;"></i></div>
+            {{ label }}
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
+    {# Activity stats + heatmap #}
+    <div class="sidebar-card">
+      <div class="sidebar-card-header">
+        <i class="fas fa-chart-bar"></i> Actividad — últimas 12 semanas
+      </div>
+      <div class="sidebar-card-body">
+        <div class="stats-row">
+          <div class="stat-mini">
+            <div class="stat-mini-val">{{ activity_stats.total_apps }}</div>
+            <div class="stat-mini-lbl">postulaciones</div>
+          </div>
+          <div class="stat-mini">
+            <div class="stat-mini-val">{{ activity_stats.total_interviews }}</div>
+            <div class="stat-mini-lbl">entrevistas</div>
+          </div>
+          <div class="stat-mini">
+            <div class="stat-mini-val" style="color:{% if activity_stats.response_rate >= 30 %}#16A34A{% elif activity_stats.response_rate >= 15 %}#D97706{% else %}#DC2626{% endif %};">{{ activity_stats.response_rate }}%</div>
+            <div class="stat-mini-lbl">respuesta</div>
+          </div>
+        </div>
+        <div class="heatmap-grid">
+          {% for week in heatmap_weeks %}
+          <div class="heatmap-week">
+            {% for count in week %}
+            <div class="heatmap-day {% if count == 0 %}{% elif count == 1 %}h1{% elif count == 2 %}h2{% elif count == 3 %}h3{% else %}h4{% endif %}" title="{{ count }} actividad{% if count != 1 %}es{% endif %}"></div>
+            {% endfor %}
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+  </div>{# end centro-sidebar #}
+
+</div>{# end centro-layout #}
 
 {% else %}
-  {# --- Empty state --- #}
-  <div class="text-center py-5">
-    <i class="fas fa-inbox fa-4x text-muted mb-3"></i>
-    <h5 class="text-muted">
-      {% if f_etapa or f_empresa or f_desde or f_hasta %}
-        No hay postulaciones que coincidan con los filtros
-      {% else %}
-        Todavía no hay postulaciones registradas
-      {% endif %}
-    </h5>
+{# ---- EMPTY STATE ---- #}
+<div class="text-center py-5">
+  <i class="fas fa-inbox fa-4x text-muted mb-3"></i>
+  <h5 class="text-muted">
     {% if f_etapa or f_empresa or f_desde or f_hasta %}
-      <a href="{{ url_for('index') }}" class="btn btn-outline-secondary mt-2">
-        <i class="fas fa-times me-1"></i>Limpiar filtros
-      </a>
+      No hay postulaciones que coincidan con los filtros
     {% else %}
-      <a href="{{ url_for('new_application') }}" class="btn btn-primary mt-2">
-        <i class="fas fa-plus me-1"></i>Agregar primera postulación
-      </a>
+      Todavía no hay postulaciones registradas
     {% endif %}
-  </div>
+  </h5>
+  {% if f_etapa or f_empresa or f_desde or f_hasta %}
+    <a href="{{ url_for('index') }}" class="btn btn-outline-secondary mt-2">
+      <i class="fas fa-times me-1"></i>Limpiar filtros
+    </a>
+  {% else %}
+    <a href="{{ url_for('new_application') }}" class="btn btn-primary mt-2">
+      <i class="fas fa-plus me-1"></i>Agregar primera postulación
+    </a>
+  {% endif %}
+</div>
 {% endif %}
 
 {% endblock %}
@@ -315,8 +351,27 @@
 {% block extra_js %}
 <script src="{{ url_for('static', filename='js/rating.js') }}"></script>
 <script>
-  document.addEventListener('DOMContentLoaded', function () {
-    initRatingStars();
-  });
+document.addEventListener('DOMContentLoaded', function () {
+  // Rating stars (existing)
+  if (typeof initRatingStars === 'function') initRatingStars();
+
+  // Prep checklist with localStorage persistence
+  var cl = document.getElementById('prepChecklist');
+  if (cl) {
+    var appId = cl.dataset.appId;
+    var key = 'prep_' + appId;
+    var done = JSON.parse(localStorage.getItem(key) || '[]');
+    cl.querySelectorAll('.prep-item').forEach(function(item) {
+      var k = item.dataset.key;
+      if (done.indexOf(k) !== -1) item.classList.add('done');
+      item.addEventListener('click', function() {
+        item.classList.toggle('done');
+        var updated = [];
+        cl.querySelectorAll('.prep-item.done').forEach(function(d) { updated.push(d.dataset.key); });
+        localStorage.setItem(key, JSON.stringify(updated));
+      });
+    });
+  }
+});
 </script>
 {% endblock %}
