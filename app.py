@@ -464,6 +464,26 @@ def update_rating(app_id):
 
 # --- Routes: Interviews ---
 
+@app.route('/interview/new')
+def new_interview_global():
+    """Global new-interview page: user picks the application from a dropdown."""
+    applications = load_applications()
+    applications.sort(key=lambda a: a.get('empresa', '').lower())
+    return render_template('interview_form.html', application=None, applications=applications, interview=None)
+
+
+@app.route('/interview', methods=['POST'])
+def create_interview_global():
+    """Handle interview creation from the global form (app_id comes from the form body)."""
+    app_id = request.form.get('app_id', '').strip()
+    if not app_id:
+        applications = load_applications()
+        applications.sort(key=lambda a: a.get('empresa', '').lower())
+        flash('Seleccioná una postulación.', 'danger')
+        return render_template('interview_form.html', application=None, applications=applications, interview=None)
+    return create_interview(app_id)
+
+
 @app.route('/application/<app_id>/interview/new')
 def new_interview(app_id):
     application = load_application(app_id)

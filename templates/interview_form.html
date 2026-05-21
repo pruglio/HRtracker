@@ -11,14 +11,32 @@
           <i class="fas fa-{% if interview %}edit{% else %}plus{% endif %} me-2"></i>
           {% if interview %}Editar entrevista{% else %}Nueva entrevista{% endif %}
         </h5>
+        {% if application %}
         <small class="text-white-50">
           {{ application.empresa }} — {{ application.puesto }}
         </small>
+        {% endif %}
       </div>
       <div class="card-body">
 
         <form method="POST"
-              action="{% if interview %}{{ url_for('update_interview', app_id=application.id, interview_id=interview.id) }}{% else %}{{ url_for('create_interview', app_id=application.id) }}{% endif %}">
+              action="{% if interview %}{{ url_for('update_interview', app_id=application.id, interview_id=interview.id) }}{% elif application %}{{ url_for('create_interview', app_id=application.id) }}{% else %}{{ url_for('create_interview_global') }}{% endif %}">
+
+          {% if not application and applications %}
+          {# === Postulación === #}
+          <p class="form-section-title">Postulación</p>
+          <div class="row g-3 mb-4">
+            <div class="col-12">
+              <label for="app_id" class="form-label">¿A qué postulación corresponde?</label>
+              <select class="form-select" id="app_id" name="app_id" required>
+                <option value="">— Seleccioná una postulación —</option>
+                {% for app in applications %}
+                <option value="{{ app.id }}">{{ app.empresa }} — {{ app.puesto }}</option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+          {% endif %}
 
           {# === Evento === #}
           <p class="form-section-title">Datos de la entrevista</p>
@@ -80,7 +98,7 @@
 
           {# === Buttons === #}
           <div class="d-flex justify-content-end gap-2 mt-2">
-            <a href="{{ url_for('application_detail', app_id=application.id) }}"
+            <a href="{% if application %}{{ url_for('application_detail', app_id=application.id) }}{% else %}{{ url_for('index') }}{% endif %}"
                class="btn btn-outline-secondary">
               <i class="fas fa-times me-1"></i>Cancelar
             </a>
