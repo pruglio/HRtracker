@@ -14,8 +14,8 @@
   'Descartado': 'dark'
 } %}
 
-<div class="d-flex justify-content-between align-items-center mb-3">
-  <h4 class="mb-0"><i class="fas fa-briefcase me-2 text-primary"></i>Postulaciones</h4>
+<div class="page-header">
+  <div class="page-title">Postulaciones</div>
   <div class="d-flex gap-2">
     <a href="{{ url_for('new_interview_global') }}" class="btn btn-outline-primary">
       <i class="fas fa-calendar-plus me-1"></i>Nueva entrevista
@@ -29,11 +29,14 @@
 {# --- Upcoming interviews panel --- #}
 {% if upcoming_interviews %}
 <div class="card shadow-sm mb-4">
-  <div class="card-header py-2 bg-white">
-    <h6 class="mb-0"><i class="fas fa-calendar-check me-2 text-primary"></i>Próximas entrevistas</h6>
+  <div class="card-header">
+    <div class="upcoming-panel-header">
+      <div class="upcoming-panel-dot"></div>
+      Próximas entrevistas
+    </div>
   </div>
   <div class="card-body p-0">
-    <table class="table table-sm table-hover mb-0 align-middle">
+    <table class="table table-sm table-hover mb-0 align-middle upcoming-panel">
       <tbody>
         {% for iv in upcoming_interviews %}
         <tr>
@@ -162,7 +165,11 @@
                 </span>
               </td>
               <td>
-                <small>{{ app.modalidad or '—' }}</small>
+                {% if app.modalidad %}
+                  <span class="modalidad-tag modalidad-{{ app.modalidad | lower | replace(' ', '') }}">{{ app.modalidad }}</span>
+                {% else %}
+                  <small class="text-muted">—</small>
+                {% endif %}
               </td>
               <td>
                 <small>
