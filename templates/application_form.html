@@ -71,7 +71,7 @@
               <div class="input-group">
                 <span class="input-group-text">$</span>
                 <input type="number" class="form-control" id="salario_min" name="salario_min"
-                       min="0" step="1000" placeholder="45000"
+                       min="0" step="100" placeholder="45000"
                        value="{{ application.salario_min if application and application.salario_min else '' }}">
               </div>
             </div>
@@ -80,7 +80,7 @@
               <div class="input-group">
                 <span class="input-group-text">$</span>
                 <input type="number" class="form-control" id="salario_max" name="salario_max"
-                       min="0" step="1000" placeholder="65000"
+                       min="0" step="100" placeholder="65000"
                        value="{{ application.salario_max if application and application.salario_max else '' }}">
               </div>
             </div>
