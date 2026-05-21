@@ -61,6 +61,8 @@ ETAPA_ORDER = {
     'Descartado': 6,
 }
 
+DIAS_ES = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']
+
 
 # --- Helpers ---
 
@@ -199,22 +201,49 @@ def is_future_interview(iv, now):
 
 
 def compute_proxima_entrevista(application, now):
-    """Return 'Coordinada', 'A coordinar', or 'Esperando' for an application.
+    """Return a dict with status and next interview info for an application.
 
     now: datetime object for comparison (injected for testability).
     Rules:
       - 'Coordinada'  → at least one interview that is_future_interview
       - 'A coordinar' → at least one interview without a date
       - 'Esperando'   → no interviews, or all interviews are in the past
+
+    Returns:
+        {
+            'status': 'Coordinada' | 'A coordinar' | 'Esperando',
+            'next_fecha': str,  # set when status == 'Coordinada', else ''
+            'next_hora': str,   # set when status == 'Coordinada' and hora present, else ''
+        }
     """
     interviews = application.get('interviews', [])
     has_undated = any(not iv.get('fecha_entrevista') for iv in interviews)
-    has_future = any(is_future_interview(iv, now) for iv in interviews)
-    if has_future:
-        return 'Coordinada'
+    future_ivs = [iv for iv in interviews if is_future_interview(iv, now)]
+    if future_ivs:
+        next_iv = min(future_ivs, key=lambda iv: (iv.get('fecha_entrevista', ''), iv.get('hora_entrevista', '') or '99:99'))
+        return {
+            'status': 'Coordinada',
+            'next_fecha': next_iv.get('fecha_entrevista', ''),
+            'next_hora': next_iv.get('hora_entrevista', '') or '',
+        }
     if has_undated:
-        return 'A coordinar'
-    return 'Esperando'
+        return {'status': 'A coordinar', 'next_fecha': '', 'next_hora': ''}
+    return {'status': 'Esperando', 'next_fecha': '', 'next_hora': ''}
+
+
+def format_proxima_fecha(fecha, hora=''):
+    """Format fecha as 'Martes 10/05/2026' (+ hora if set)."""
+    if not fecha:
+        return ''
+    try:
+        dt = datetime.strptime(fecha, '%Y-%m-%d')
+        dia = DIAS_ES[dt.weekday()]
+        formatted = f"{dia} {dt.strftime('%d/%m/%Y')}"
+        if hora:
+            formatted += f" {hora}"
+        return formatted
+    except ValueError:
+        return fecha
 
 
 # --- Routes: Applications ---
@@ -226,7 +255,9 @@ def index():
 
     # Attach computed status to every application
     for a in applications:
-        a['proxima_entrevista'] = compute_proxima_entrevista(a, now_dt)
+        proxima = compute_proxima_entrevista(a, now_dt)
+        a['proxima_entrevista'] = proxima['status']
+        a['proxima_entrevista_label'] = format_proxima_fecha(proxima['next_fecha'], proxima['next_hora']) if proxima['status'] == 'Coordinada' else ''
 
     # Build upcoming interviews panel from ALL applications (before filtering)
     upcoming_interviews = []

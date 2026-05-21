@@ -138,6 +138,7 @@
                 {% set proxima = app.proxima_entrevista %}
                 {% if proxima == 'Coordinada' %}
                   <span class="badge bg-success">Coordinada</span>
+                  {% if app.proxima_entrevista_label %}<br><small class="text-muted">{{ app.proxima_entrevista_label }}</small>{% endif %}
                 {% elif proxima == 'A coordinar' %}
                   <span class="badge bg-warning text-dark">A coordinar</span>
                 {% else %}
@@ -211,6 +212,7 @@
           {% set proxima = app.proxima_entrevista %}
           {% if proxima == 'Coordinada' %}
             <span class="badge bg-success">Coordinada</span>
+            {% if app.proxima_entrevista_label %}<br><small class="text-muted">{{ app.proxima_entrevista_label }}</small>{% endif %}
           {% elif proxima == 'A coordinar' %}
             <span class="badge bg-warning text-dark">A coordinar</span>
           {% else %}
