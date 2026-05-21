@@ -254,6 +254,20 @@ body {
   color: var(--ex-text);
   letter-spacing: -0.02em;
 }
+@media (max-width: 575px) {
+  .page-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+  .page-header .d-flex {
+    width: 100%;
+  }
+  .page-header .btn {
+    flex: 1;
+    justify-content: center;
+  }
+}
 
 /* --- Buttons override --- */
 .btn {
