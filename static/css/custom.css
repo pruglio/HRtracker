@@ -341,6 +341,17 @@ body {
   flex-shrink: 0;
 }
 
+/* --- Filter chevron animation --- */
+.filter-chevron {
+  font-size: 12px;
+  color: var(--ex-muted);
+  transition: transform 0.2s ease;
+}
+.filter-chevron.rotated { transform: rotate(180deg); }
+[data-bs-target="#filterBody"][aria-expanded="true"] .filter-chevron {
+  transform: rotate(180deg);
+}
+
 /* --- Filter card --- */
 .filter-card {
   background: var(--ex-surface) !important;

@@ -61,40 +61,56 @@
 {% endif %}
 
 {# --- Filter card --- #}
+{% set filters_active = f_etapa or f_empresa or f_desde or f_hasta %}
 <div class="card filter-card mb-4">
-  <div class="card-body py-2">
-    <form method="GET" action="{{ url_for('index') }}" class="row g-2 align-items-end">
-      <div class="col-6 col-md-3">
-        <label class="form-label form-label-sm mb-1">Etapa</label>
-        <select name="etapa" class="form-select form-select-sm">
-          <option value="">Todas</option>
-          {% for e in etapas %}
-            <option value="{{ e }}" {% if f_etapa == e %}selected{% endif %}>{{ e }}</option>
-          {% endfor %}
-        </select>
-      </div>
-      <div class="col-6 col-md-3">
-        <label class="form-label form-label-sm mb-1">Empresa</label>
-        <input type="text" name="empresa" class="form-control form-control-sm"
-               placeholder="Filtrar empresa" value="{{ f_empresa }}">
-      </div>
-      <div class="col-6 col-md-2">
-        <label class="form-label form-label-sm mb-1">Desde</label>
-        <input type="date" name="desde" class="form-control form-control-sm" value="{{ f_desde }}">
-      </div>
-      <div class="col-6 col-md-2">
-        <label class="form-label form-label-sm mb-1">Hasta</label>
-        <input type="date" name="hasta" class="form-control form-control-sm" value="{{ f_hasta }}">
-      </div>
-      <div class="col-12 col-md-2 d-flex gap-2">
-        <button type="submit" class="btn btn-primary btn-sm flex-grow-1">
-          <i class="fas fa-filter me-1"></i>Filtrar
-        </button>
-        <a href="{{ url_for('index') }}" class="btn btn-outline-secondary btn-sm">
-          <i class="fas fa-times"></i>
-        </a>
-      </div>
-    </form>
+  <div class="card-header py-2 px-3" style="cursor:pointer;"
+       data-bs-toggle="collapse" data-bs-target="#filterBody" aria-expanded="{{ 'true' if filters_active else 'false' }}">
+    <div class="d-flex align-items-center justify-content-between">
+      <span class="upcoming-panel-header" style="gap:6px;">
+        <i class="fas fa-filter" style="font-size:11px;"></i>
+        Filtros
+        {% if filters_active %}
+          <span class="badge bg-primary ms-1" style="font-size:10px;border-radius:10px;padding:2px 7px;">activos</span>
+        {% endif %}
+      </span>
+      <i class="fas fa-chevron-down filter-chevron {% if filters_active %}rotated{% endif %}"></i>
+    </div>
+  </div>
+  <div class="collapse {% if filters_active %}show{% endif %}" id="filterBody">
+    <div class="card-body py-2">
+      <form method="GET" action="{{ url_for('index') }}" class="row g-2 align-items-end">
+        <div class="col-6 col-md-3">
+          <label class="form-label form-label-sm mb-1">Etapa</label>
+          <select name="etapa" class="form-select form-select-sm">
+            <option value="">Todas</option>
+            {% for e in etapas %}
+              <option value="{{ e }}" {% if f_etapa == e %}selected{% endif %}>{{ e }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-6 col-md-3">
+          <label class="form-label form-label-sm mb-1">Empresa</label>
+          <input type="text" name="empresa" class="form-control form-control-sm"
+                 placeholder="Filtrar empresa" value="{{ f_empresa }}">
+        </div>
+        <div class="col-6 col-md-2">
+          <label class="form-label form-label-sm mb-1">Desde</label>
+          <input type="date" name="desde" class="form-control form-control-sm" value="{{ f_desde }}">
+        </div>
+        <div class="col-6 col-md-2">
+          <label class="form-label form-label-sm mb-1">Hasta</label>
+          <input type="date" name="hasta" class="form-control form-control-sm" value="{{ f_hasta }}">
+        </div>
+        <div class="col-12 col-md-2 d-flex gap-2">
+          <button type="submit" class="btn btn-primary btn-sm flex-grow-1">
+            <i class="fas fa-filter me-1"></i>Filtrar
+          </button>
+          <a href="{{ url_for('index') }}" class="btn btn-outline-secondary btn-sm">
+            <i class="fas fa-times"></i>
+          </a>
+        </div>
+      </form>
+    </div>
   </div>
 </div>
 
