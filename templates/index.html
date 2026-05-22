@@ -14,6 +14,23 @@
   'Descartado': 'dark'
 } %}
 
+{# Proxima entrevista status pill #}
+{% macro proxima_pill(app) %}
+  {% if app.proxima_entrevista == 'Coordinada' %}
+    <span class="proxima-pill proxima-coordinada">
+      <i class="fas fa-check-circle"></i>{{ app.proxima_entrevista_label or 'Coordinada' }}
+    </span>
+  {% elif app.proxima_entrevista == 'A coordinar' %}
+    <span class="proxima-pill proxima-acoordi">
+      <i class="fas fa-calendar-alt"></i>A coordinar
+    </span>
+  {% else %}
+    <span class="proxima-pill proxima-esperando">
+      <i class="fas fa-clock"></i>Esperando respuesta
+    </span>
+  {% endif %}
+{% endmacro %}
+
 {# Staleness helpers (Jinja macros) #}
 {% macro staleness_bar(days) %}
   {% set pct = [days / 21 * 100, 100]|min|int %}
@@ -138,9 +155,10 @@
             <div class="accion-puesto">{{ app.puesto }}</div>
             <div class="accion-meta">
               <span class="accion-etapa-tag">{{ app.etapa }}</span>
+              {{ proxima_pill(app) }}
               <span class="accion-staleness">
                 <i class="fas fa-clock me-1" style="font-size:10px;"></i>
-                {% if app.staleness_days == 0 %}Hoy{% else %}{{ app.staleness_days }}d sin actividad{% endif %}
+                {% if app.staleness_days == 0 %}Hoy{% else %}{{ app.staleness_days }}d{% endif %}
               </span>
             </div>
           </div>
@@ -175,9 +193,11 @@
           <div class="accion-item-main">
             <a href="{{ url_for('application_detail', app_id=app.id) }}" class="accion-empresa">{{ app.empresa }}</a>
             <div class="accion-puesto">{{ app.puesto }}</div>
-            <div class="accion-iv-date">
-              <i class="fas fa-check-circle"></i>
-              {{ app.proxima_entrevista_label or 'Coordinada' }}
+            <div class="accion-meta" style="margin-top:5px;">
+              <span class="accion-etapa-tag">{{ app.etapa }}</span>
+              <span class="proxima-pill proxima-coordinada">
+                <i class="fas fa-check-circle"></i>{{ app.proxima_entrevista_label or 'Coordinada' }}
+              </span>
             </div>
           </div>
           <div class="accion-actions">
@@ -239,6 +259,7 @@
             <div class="accion-puesto">{{ app.puesto }}</div>
             <div class="accion-meta">
               <span class="accion-etapa-tag">{{ app.etapa }}</span>
+              {{ proxima_pill(app) }}
               {% if app.staleness_days > 0 %}
               <span class="accion-staleness">{{ app.staleness_days }}d</span>
               {% endif %}
