@@ -54,7 +54,33 @@
 
     {# Notes #}
     {% if iv.notas %}
-    <pre class="notes-text mb-2">{{ iv.notas }}</pre>
+    <div class="mb-2">
+      <div class="d-flex justify-content-between align-items-center mb-1">
+        <span class="form-section-title mb-0">Notas escritas</span>
+        <div class="d-flex gap-1">
+          <button type="button"
+                  class="btn btn-sm btn-outline-secondary tts-btn"
+                  data-notes="{{ iv.notas | e }}"
+                  data-iv-id="{{ iv.id }}"
+                  title="Escuchar notas">
+            <i class="fas fa-volume-up me-1"></i>Escuchar
+          </button>
+          <a href="#"
+             class="btn btn-sm btn-outline-success whatsapp-share-btn"
+             data-notes="{{ iv.notas | e }}"
+             data-empresa="{{ application.empresa | e }}"
+             data-puesto="{{ application.puesto | e }}"
+             data-fecha="{{ iv.fecha_entrevista or '' }}"
+             data-hora="{{ iv.hora_entrevista or '' }}"
+             data-entrevistador="{{ iv.entrevistador_nombre or '' }}"
+             title="Compartir por WhatsApp"
+             target="_blank">
+            <i class="fab fa-whatsapp me-1"></i>WhatsApp
+          </a>
+        </div>
+      </div>
+      <pre class="notes-text mb-0">{{ iv.notas }}</pre>
+    </div>
     {% endif %}
 
     {# Voice notes section #}

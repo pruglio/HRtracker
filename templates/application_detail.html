@@ -220,6 +220,41 @@
     document.querySelectorAll('.delete-voice-btn').forEach(btn => {
       btn.addEventListener('click', handleDeleteVoiceNote);
     });
+
+    // ── Text-to-Speech ──────────────────────────────────────────
+    document.querySelectorAll('.tts-btn').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        if (window.speechSynthesis.speaking) {
+          window.speechSynthesis.cancel();
+          return;
+        }
+        var utter = new SpeechSynthesisUtterance(btn.dataset.notes);
+        utter.lang = 'es-UY';
+        utter.rate = 0.92;
+        utter.onstart = function() {
+          btn.innerHTML = '<i class="fas fa-stop me-1"></i>Detener';
+          btn.classList.replace('btn-outline-secondary', 'btn-secondary');
+        };
+        utter.onend = utter.onerror = function() {
+          btn.innerHTML = '<i class="fas fa-volume-up me-1"></i>Escuchar';
+          btn.classList.replace('btn-secondary', 'btn-outline-secondary');
+        };
+        window.speechSynthesis.speak(utter);
+      });
+    });
+
+    // ── WhatsApp share ───────────────────────────────────────────
+    document.querySelectorAll('.whatsapp-share-btn').forEach(function(btn) {
+      btn.addEventListener('click', function(e) {
+        e.preventDefault();
+        var d = btn.dataset;
+        var msg = '*' + d.empresa + ' — ' + d.puesto + '*\n';
+        if (d.fecha) msg += 'Fecha: ' + d.fecha + (d.hora ? ' ' + d.hora : '') + '\n';
+        if (d.entrevistador) msg += 'Entrevistador/a: ' + d.entrevistador + '\n';
+        msg += '\n' + d.notes;
+        window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank');
+      });
+    });
   });
 </script>
 {% endblock %}
