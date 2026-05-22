@@ -7,10 +7,11 @@ from zoneinfo import ZoneInfo
 
 APP_TZ = ZoneInfo('America/Montevideo')
 
+import asyncio
 import io
 from flask import (Flask, abort, flash, jsonify, redirect, render_template,
                    request, send_file, url_for)
-from gtts import gTTS
+import edge_tts
 from supabase import create_client, Client
 
 app = Flask(__name__)
@@ -896,17 +897,23 @@ def serve_voice(app_id, interview_id, filename):
 
 @app.route('/api/tts')
 def text_to_speech():
-    """Convert written interview notes to MP3 using Google TTS (Argentine accent)."""
+    """Convert written interview notes to MP3 using Microsoft Edge Neural TTS.
+    Voice: es-UY-MateoNeural — Uruguayan male, no API key required."""
     text = request.args.get('text', '').strip()
     if not text:
         abort(400)
-    # Hard cap to avoid abuse / slow responses
     text = text[:3000]
     try:
-        tts = gTTS(text=text, lang='es', tld='com.ar', slow=False)
-        buf = io.BytesIO()
-        tts.write_to_fp(buf)
-        buf.seek(0)
+        async def _synthesize():
+            communicate = edge_tts.Communicate(text, voice='es-UY-MateoNeural')
+            buf = io.BytesIO()
+            async for chunk in communicate.stream():
+                if chunk['type'] == 'audio':
+                    buf.write(chunk['data'])
+            buf.seek(0)
+            return buf
+
+        buf = asyncio.run(_synthesize())
         return send_file(buf, mimetype='audio/mpeg',
                          as_attachment=False,
                          download_name='notas.mp3')
