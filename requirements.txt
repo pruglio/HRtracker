@@ -8,3 +8,4 @@ blinker==1.7.0
 gunicorn==21.2.0
 pytest==8.2.2
 supabase==2.10.0
+gTTS==2.5.3

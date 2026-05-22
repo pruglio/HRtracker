@@ -7,8 +7,10 @@ from zoneinfo import ZoneInfo
 
 APP_TZ = ZoneInfo('America/Montevideo')
 
+import io
 from flask import (Flask, abort, flash, jsonify, redirect, render_template,
-                   request, url_for)
+                   request, send_file, url_for)
+from gtts import gTTS
 from supabase import create_client, Client
 
 app = Flask(__name__)
@@ -890,6 +892,26 @@ def serve_voice(app_id, interview_id, filename):
     result = supabase_client.storage.from_('voice-notes').create_signed_url(storage_path, 3600)
     signed_url = result.get('signedURL') or result.get('signedUrl', '')
     return redirect(signed_url)
+
+
+@app.route('/api/tts')
+def text_to_speech():
+    """Convert written interview notes to MP3 using Google TTS (Argentine accent)."""
+    text = request.args.get('text', '').strip()
+    if not text:
+        abort(400)
+    # Hard cap to avoid abuse / slow responses
+    text = text[:3000]
+    try:
+        tts = gTTS(text=text, lang='es', tld='com.ar', slow=False)
+        buf = io.BytesIO()
+        tts.write_to_fp(buf)
+        buf.seek(0)
+        return send_file(buf, mimetype='audio/mpeg',
+                         as_attachment=False,
+                         download_name='notas.mp3')
+    except Exception:
+        abort(503)
 
 
 @app.route('/report')

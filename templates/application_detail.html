@@ -221,25 +221,47 @@
       btn.addEventListener('click', handleDeleteVoiceNote);
     });
 
-    // ── Text-to-Speech ──────────────────────────────────────────
+    // ── Text-to-Speech (Google TTS via /api/tts) ────────────────
     document.querySelectorAll('.tts-btn').forEach(function(btn) {
+      var audio = null;
+
+      function resetBtn() {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-volume-up me-1"></i>Escuchar';
+        btn.classList.replace('btn-secondary', 'btn-outline-secondary');
+      }
+
       btn.addEventListener('click', function() {
-        if (window.speechSynthesis.speaking) {
-          window.speechSynthesis.cancel();
+        // If already playing → stop
+        if (audio && !audio.paused) {
+          audio.pause();
+          audio.currentTime = 0;
+          resetBtn();
           return;
         }
-        var utter = new SpeechSynthesisUtterance(btn.dataset.notes);
-        utter.lang = 'es-UY';
-        utter.rate = 0.92;
-        utter.onstart = function() {
+
+        // Loading state
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Cargando...';
+
+        var url = '/api/tts?text=' + encodeURIComponent(btn.dataset.notes);
+        audio = new Audio(url);
+
+        audio.addEventListener('canplay', function() {
+          btn.disabled = false;
           btn.innerHTML = '<i class="fas fa-stop me-1"></i>Detener';
           btn.classList.replace('btn-outline-secondary', 'btn-secondary');
-        };
-        utter.onend = utter.onerror = function() {
-          btn.innerHTML = '<i class="fas fa-volume-up me-1"></i>Escuchar';
-          btn.classList.replace('btn-secondary', 'btn-outline-secondary');
-        };
-        window.speechSynthesis.speak(utter);
+          audio.play();
+        }, { once: true });
+
+        audio.addEventListener('ended', resetBtn, { once: true });
+        audio.addEventListener('error', function() {
+          resetBtn();
+          alert('No se pudo cargar el audio. Verificá la conexión.');
+        }, { once: true });
+
+        // Trigger load
+        audio.load();
       });
     });
 
