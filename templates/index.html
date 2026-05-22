@@ -358,6 +358,9 @@ document.addEventListener('DOMContentLoaded', function () {
   // Rating stars (existing)
   if (typeof initRatingStars === 'function') initRatingStars();
 
+  // Auto-refresh every 30 minutes to keep upcoming interviews current
+  setTimeout(function() { window.location.reload(); }, 30 * 60 * 1000);
+
   // Prep checklist with localStorage persistence
   var cl = document.getElementById('prepChecklist');
   if (cl) {

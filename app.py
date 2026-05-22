@@ -3,6 +3,9 @@ import time
 import uuid
 from datetime import datetime, timedelta
 from typing import Optional
+from zoneinfo import ZoneInfo
+
+APP_TZ = ZoneInfo('America/Montevideo')
 
 from flask import (Flask, abort, flash, jsonify, redirect, render_template,
                    request, url_for)
@@ -73,8 +76,13 @@ def make_id(existing_ids):
             return new_id
 
 
+def now_local() -> datetime:
+    """Current datetime in America/Montevideo (naive, for comparison with stored local times)."""
+    return datetime.now(APP_TZ).replace(tzinfo=None)
+
+
 def now_str():
-    return datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    return now_local().strftime('%Y-%m-%d %H:%M:%S')
 
 
 def parse_salary(value):
@@ -429,7 +437,7 @@ def compute_report_data(applications, now_dt):
 @app.route('/')
 def index():
     applications = load_applications()
-    now_dt = datetime.now()
+    now_dt = now_local()
 
     # Attach computed status to every application
     for a in applications:
@@ -887,7 +895,7 @@ def serve_voice(app_id, interview_id, filename):
 @app.route('/report')
 def report():
     applications = load_applications()
-    now_dt = datetime.now()
+    now_dt = now_local()
     today = now_dt.date()
 
     # Attach proxima_entrevista and staleness to each app
