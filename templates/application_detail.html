@@ -265,16 +265,54 @@
       });
     });
 
-    // ── WhatsApp share ───────────────────────────────────────────
+    // ── WhatsApp share (audio file via Web Share API) ────────────
     document.querySelectorAll('.whatsapp-share-btn').forEach(function(btn) {
-      btn.addEventListener('click', function(e) {
+      btn.addEventListener('click', async function(e) {
         e.preventDefault();
         var d = btn.dataset;
-        var msg = '*' + d.empresa + ' — ' + d.puesto + '*\n';
-        if (d.fecha) msg += 'Fecha: ' + d.fecha + (d.hora ? ' ' + d.hora : '') + '\n';
-        if (d.entrevistador) msg += 'Entrevistador/a: ' + d.entrevistador + '\n';
-        msg += '\n' + d.notes;
-        window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank');
+
+        // Loading state
+        var orig = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Generando audio...';
+
+        try {
+          // 1. Generate audio from TTS endpoint
+          var res = await fetch('/api/tts?text=' + encodeURIComponent(d.notes));
+          if (!res.ok) throw new Error('TTS error');
+          var blob = await res.blob();
+          var filename = (d.empresa + '-notas.mp3')
+            .toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9\-\.]/g, '');
+          var file = new File([blob], filename, { type: 'audio/mpeg' });
+
+          // 2. Try Web Share API (mobile: opens share sheet with WhatsApp)
+          if (navigator.canShare && navigator.canShare({ files: [file] })) {
+            await navigator.share({
+              files: [file],
+              title: d.empresa + ' — ' + d.puesto,
+            });
+          } else {
+            // 3. Desktop fallback: download + open WhatsApp text
+            var url = URL.createObjectURL(blob);
+            var a = document.createElement('a');
+            a.href = url; a.download = filename; a.click();
+            setTimeout(function() { URL.revokeObjectURL(url); }, 2000);
+
+            // Also open WhatsApp with text for context
+            var msg = '*' + d.empresa + ' — ' + d.puesto + '*\n';
+            if (d.fecha) msg += 'Fecha: ' + d.fecha + (d.hora ? ' ' + d.hora : '') + '\n';
+            if (d.entrevistador) msg += 'Entrevistador/a: ' + d.entrevistador + '\n';
+            msg += '\n_(Audio descargado — adjuntalo en WhatsApp)_';
+            window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank');
+          }
+        } catch (err) {
+          if (err.name !== 'AbortError') {
+            alert('No se pudo generar el audio. Verificá la conexión.');
+          }
+        } finally {
+          btn.disabled = false;
+          btn.innerHTML = orig;
+        }
       });
     });
   });
