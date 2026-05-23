@@ -905,7 +905,7 @@ def text_to_speech():
     text = text[:3000]
     try:
         async def _synthesize():
-            communicate = edge_tts.Communicate(text, voice='es-UY-MateoNeural')
+            communicate = edge_tts.Communicate(text, voice='es-UY-MateoNeural', rate='+30%')
             buf = io.BytesIO()
             async for chunk in communicate.stream():
                 if chunk['type'] == 'audio':
