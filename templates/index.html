@@ -365,11 +365,9 @@
         </div>
         <div class="heatmap-grid">
           {% for week in heatmap_weeks %}
-          <div class="heatmap-week">
             {% for count in week %}
-            <div class="heatmap-day {% if count == 0 %}{% elif count == 1 %}h1{% elif count == 2 %}h2{% elif count == 3 %}h3{% else %}h4{% endif %}" title="{{ count }} actividad{% if count != 1 %}es{% endif %}"></div>
+            <div class="heatmap-day {% if count >= 4 %}h4{% elif count == 3 %}h3{% elif count == 2 %}h2{% elif count == 1 %}h1{% endif %}" title="{{ count }} actividad{% if count != 1 %}es{% endif %}"></div>
             {% endfor %}
-          </div>
           {% endfor %}
         </div>
       </div>
