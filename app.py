@@ -312,26 +312,17 @@ def compute_heatmap(applications, today, weeks=12):
             except (TypeError, ValueError):
                 pass
 
-        # Interviews
+        # Interviews: count the actual interview date (fecha_entrevista),
+        # not when the record was entered — this shows real activity over time
         for iv in a.get('interviews', []):
-            iv_created = iv.get('created_at')
-            if iv_created:
+            fecha = iv.get('fecha_entrevista')
+            if fecha:
                 try:
-                    d_str = iv_created[:10]
+                    d_str = fecha[:10]
                     if d_str in counts:
                         counts[d_str] += 1
                 except (TypeError, ValueError):
                     pass
-            else:
-                # fallback: fecha_entrevista date
-                fecha = iv.get('fecha_entrevista')
-                if fecha:
-                    try:
-                        d_str = fecha[:10]
-                        if d_str in counts:
-                            counts[d_str] += 1
-                    except (TypeError, ValueError):
-                        pass
 
     # Reshape into 12×7
     result = []

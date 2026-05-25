@@ -641,14 +641,14 @@ body {
 
 /* Heatmap */
 .heatmap-grid {
-  display: grid;
-  grid-template-columns: repeat(12, 1fr);
+  display: flex;
   gap: 3px;
 }
-.heatmap-week { display: flex; flex-direction: column; gap: 3px; }
+.heatmap-week { display: flex; flex-direction: column; gap: 3px; flex: 1; }
 .heatmap-day {
-  width: 100%; aspect-ratio: 1;
-  border-radius: 2px; background: var(--ex-border);
+  height: 11px;
+  border-radius: 2px;
+  background: var(--ex-border);
 }
 .heatmap-day.h1 { background: #BFDBFE; }
 .heatmap-day.h2 { background: #60A5FA; }
