@@ -350,7 +350,7 @@
             var url = URL.createObjectURL(blob);
             var a = document.createElement('a');
             a.href = url;
-            a.download = 'oferta-' + slug(empresa) + '.png';
+            a.download = 'oferta-' + slug(empresa) + '.jpg';
             a.click();
             setTimeout(function() { URL.revokeObjectURL(url); }, 2000);
           } catch (err) {
@@ -372,8 +372,8 @@
             var res = await fetch(postalUrl);
             if (!res.ok) throw new Error('Fetch falló');
             var blob = await res.blob();
-            var filename = 'oferta-' + slug(empresa) + '.png';
-            var file = new File([blob], filename, { type: 'image/png' });
+            var filename = 'oferta-' + slug(empresa) + '.jpg';
+            var file = new File([blob], filename, { type: 'image/jpeg' });
 
             var isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
             if (isMobile && navigator.canShare && navigator.canShare({ files: [file] })) {

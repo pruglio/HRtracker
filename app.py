@@ -25,6 +25,9 @@ FONT_MEDIUM = os.path.join(FONTS_DIR, 'Outfit-Medium.ttf')
 FONT_BOLD = os.path.join(FONTS_DIR, 'Outfit-Bold.ttf')
 FONT_SCRIPT = os.path.join(FONTS_DIR, 'Pacifico-Regular.ttf')
 
+IMG_DIR = os.path.join(app.root_path, 'static', 'img')
+BG_SAN_SEBASTIAN = os.path.join(IMG_DIR, 'san-sebastian.jpg')
+
 SUPABASE_URL = os.environ.get('SUPABASE_URL', '')
 SUPABASE_KEY = os.environ.get('SUPABASE_KEY', '')
 
@@ -924,28 +927,30 @@ def generate_offer_postcard(app_entry):
     """Genera un PNG 1080x1080 celebrando una oferta de trabajo.
     Sin salario. Cierre fijo del País Vasco."""
     W, H = 1080, 1080
-    img = Image.new('RGB', (W, H), '#FEF3C7')
+
+    # Fondo: foto de La Concha (San Sebastián) con velo blanco translúcido
+    # para que el texto se lea bien sin perder el ambiente del lugar.
+    try:
+        bg = Image.open(BG_SAN_SEBASTIAN).convert('RGB')
+        if bg.size != (W, H):
+            bg = bg.resize((W, H), Image.LANCZOS)
+    except Exception:
+        # Fallback al gradiente original si la imagen no carga
+        bg = Image.new('RGB', (W, H), '#DBEAFE')
+    img = bg.copy()
+    overlay = Image.new('RGBA', (W, H), (255, 255, 255, 145))  # ~57% blanco
+    img = Image.alpha_composite(img.convert('RGBA'), overlay).convert('RGB')
     draw = ImageDraw.Draw(img, 'RGBA')
 
-    # Gradiente vertical cálido a frío
-    top = (254, 243, 199)
-    bot = (219, 234, 254)
-    for y in range(H):
-        t = y / H
-        r = int(top[0] + (bot[0] - top[0]) * t)
-        g = int(top[1] + (bot[1] - top[1]) * t)
-        b = int(top[2] + (bot[2] - top[2]) * t)
-        draw.line([(0, y), (W, y)], fill=(r, g, b))
-
-    # Confetti decorativo determinístico por app_id
+    # Confetti decorativo determinístico — más sutil porque ya hay foto
     seed_str = str(app_entry.get('id', ''))
     rng = _random.Random(seed_str)
     confetti_colors = [(245, 158, 11), (239, 68, 68), (16, 185, 129), (59, 130, 246)]
-    for _ in range(40):
+    for _ in range(28):
         x = rng.randint(30, W - 30)
         y = rng.randint(30, H - 30)
-        size = rng.randint(8, 16)
-        c = rng.choice(confetti_colors) + (int(255 * rng.uniform(0.5, 0.75)),)
+        size = rng.randint(7, 13)
+        c = rng.choice(confetti_colors) + (int(255 * rng.uniform(0.45, 0.65)),)
         if rng.choice([True, False]):
             draw.ellipse([x, y, x + size, y + size], fill=c)
         else:
@@ -998,17 +1003,17 @@ def generate_offer_postcard(app_entry):
     fecha = datetime.now(APP_TZ).strftime('%d / %m / %Y')
     bbox = draw.textbbox((0, 0), fecha, font=f_fecha)
     w = bbox[2] - bbox[0]
-    draw.text(((W - w) / 2, H - 90), fecha, font=f_fecha, fill='#94A3B8')
+    draw.text(((W - w) / 2, H - 90), fecha, font=f_fecha, fill='#475569')
 
     buf = io.BytesIO()
-    img.save(buf, format='PNG', optimize=True, compress_level=6)
+    img.save(buf, format='JPEG', quality=88, optimize=True, progressive=True)
     buf.seek(0)
     return buf
 
 
 @app.route('/api/postal/<app_id>')
 def offer_postcard(app_id):
-    """Devuelve un PNG con la postal celebratoria. Solo si la postulación está en etapa Oferta."""
+    """Devuelve un JPEG con la postal celebratoria. Solo si la postulación está en etapa Oferta."""
     app_entry = load_application(app_id)
     if not app_entry:
         abort(404)
@@ -1019,9 +1024,9 @@ def offer_postcard(app_id):
     except Exception:
         app.logger.exception('Error generando postal de oferta')
         abort(500)
-    resp = send_file(buf, mimetype='image/png',
+    resp = send_file(buf, mimetype='image/jpeg',
                      as_attachment=False,
-                     download_name=f'oferta-{app_id}.png')
+                     download_name=f'oferta-{app_id}.jpg')
     resp.headers['Cache-Control'] = 'no-store'
     return resp
 
