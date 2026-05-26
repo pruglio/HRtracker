@@ -9,13 +9,21 @@ APP_TZ = ZoneInfo('America/Montevideo')
 
 import asyncio
 import io
+import random as _random
 from flask import (Flask, abort, flash, jsonify, redirect, render_template,
                    request, send_file, url_for)
 import edge_tts
+from PIL import Image, ImageDraw, ImageFont
 from supabase import create_client, Client
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('FLASK_SECRET_KEY', 'hrtracker-secret-key-2026')
+
+FONTS_DIR = os.path.join(app.root_path, 'static', 'fonts')
+FONT_REGULAR = os.path.join(FONTS_DIR, 'Outfit-Regular.ttf')
+FONT_MEDIUM = os.path.join(FONTS_DIR, 'Outfit-Medium.ttf')
+FONT_BOLD = os.path.join(FONTS_DIR, 'Outfit-Bold.ttf')
+FONT_SCRIPT = os.path.join(FONTS_DIR, 'Pacifico-Regular.ttf')
 
 SUPABASE_URL = os.environ.get('SUPABASE_URL', '')
 SUPABASE_KEY = os.environ.get('SUPABASE_KEY', '')
@@ -910,6 +918,142 @@ def text_to_speech():
                          download_name='notas.mp3')
     except Exception:
         abort(503)
+
+
+def generate_offer_postcard(app_entry):
+    """Genera un PNG 1080x1080 celebrando una oferta de trabajo.
+    Sin salario. Cierre fijo del País Vasco."""
+    W, H = 1080, 1080
+    img = Image.new('RGB', (W, H), '#FEF3C7')
+    draw = ImageDraw.Draw(img, 'RGBA')
+
+    # Gradiente vertical cálido a frío
+    top = (254, 243, 199)
+    bot = (219, 234, 254)
+    for y in range(H):
+        t = y / H
+        r = int(top[0] + (bot[0] - top[0]) * t)
+        g = int(top[1] + (bot[1] - top[1]) * t)
+        b = int(top[2] + (bot[2] - top[2]) * t)
+        draw.line([(0, y), (W, y)], fill=(r, g, b))
+
+    # Confetti decorativo determinístico por app_id
+    seed_str = str(app_entry.get('id', ''))
+    rng = _random.Random(seed_str)
+    confetti_colors = [(245, 158, 11), (239, 68, 68), (16, 185, 129), (59, 130, 246)]
+    for _ in range(40):
+        x = rng.randint(30, W - 30)
+        y = rng.randint(30, H - 30)
+        size = rng.randint(8, 16)
+        c = rng.choice(confetti_colors) + (int(255 * rng.uniform(0.5, 0.75)),)
+        if rng.choice([True, False]):
+            draw.ellipse([x, y, x + size, y + size], fill=c)
+        else:
+            draw.polygon([(x, y + size), (x + size, y + size), (x + size / 2, y)], fill=c)
+
+    # Fuentes
+    f_title = ImageFont.truetype(FONT_BOLD, 60)
+    f_small = ImageFont.truetype(FONT_REGULAR, 30)
+    f_puesto = ImageFont.truetype(FONT_MEDIUM, 40)
+    f_modal = ImageFont.truetype(FONT_MEDIUM, 26)
+    f_mensaje = ImageFont.truetype(FONT_SCRIPT, 56)
+    f_fecha = ImageFont.truetype(FONT_REGULAR, 22)
+
+    def center_text(text, font, y, fill='#0F172A'):
+        bbox = draw.textbbox((0, 0), text, font=font)
+        w = bbox[2] - bbox[0]
+        draw.text(((W - w) / 2, y), text, font=font, fill=fill)
+        return bbox[3] - bbox[1]
+
+    y = 120
+    center_text('¡TENGO UNA OFERTA!', f_title, y, fill='#0F172A')
+    y += 110
+
+    center_text('en', f_small, y, fill='#64748B')
+    y += 55
+
+    # Empresa con reducción de fuente si es larga
+    empresa = (app_entry.get('empresa') or '').strip() or '—'
+    f_emp = None
+    for size in (84, 72, 60, 50, 42):
+        f_emp = ImageFont.truetype(FONT_BOLD, size)
+        bbox = draw.textbbox((0, 0), empresa, font=f_emp)
+        if (bbox[2] - bbox[0]) <= W - 120:
+            break
+    bbox = draw.textbbox((0, 0), empresa, font=f_emp)
+    w = bbox[2] - bbox[0]
+    draw.text(((W - w) / 2, y), empresa, font=f_emp, fill='#2563EB')
+    y += 120
+
+    center_text('para el puesto de', f_small, y, fill='#64748B')
+    y += 50
+
+    # Puesto con reducción
+    puesto = (app_entry.get('puesto') or '').strip() or '—'
+    f_pue = None
+    for size in (40, 34, 30, 26):
+        f_pue = ImageFont.truetype(FONT_MEDIUM, size)
+        bbox = draw.textbbox((0, 0), puesto, font=f_pue)
+        if (bbox[2] - bbox[0]) <= W - 120:
+            break
+    bbox = draw.textbbox((0, 0), puesto, font=f_pue)
+    w = bbox[2] - bbox[0]
+    draw.text(((W - w) / 2, y), puesto, font=f_pue, fill='#0F172A')
+    y += 100
+
+    # Chip de modalidad si existe
+    modalidad = (app_entry.get('modalidad') or '').strip()
+    if modalidad:
+        chip_text = modalidad
+        bbox = draw.textbbox((0, 0), chip_text, font=f_modal)
+        cw = bbox[2] - bbox[0] + 60
+        ch = bbox[3] - bbox[1] + 28
+        cx = (W - cw) / 2
+        draw.rounded_rectangle([cx, y, cx + cw, y + ch], radius=18,
+                               fill='#FFFFFF', outline='#2563EB', width=2)
+        draw.text((cx + 30, y + 10), chip_text, font=f_modal, fill='#2563EB')
+        y += ch + 50
+
+    # Separador
+    sep_y = y + 20
+    draw.line([(W / 2 - 100, sep_y), (W / 2 + 100, sep_y)], fill='#94A3B8', width=3)
+
+    # Mensaje festivo del País Vasco (script font, rojo cálido)
+    mensaje = 'ahora sí al País Vasco en Paz!! jaja'
+    bbox = draw.textbbox((0, 0), mensaje, font=f_mensaje)
+    w = bbox[2] - bbox[0]
+    draw.text(((W - w) / 2, H - 280), mensaje, font=f_mensaje, fill='#DC2626')
+
+    # Fecha
+    fecha = datetime.now(APP_TZ).strftime('%d / %m / %Y')
+    bbox = draw.textbbox((0, 0), fecha, font=f_fecha)
+    w = bbox[2] - bbox[0]
+    draw.text(((W - w) / 2, H - 90), fecha, font=f_fecha, fill='#94A3B8')
+
+    buf = io.BytesIO()
+    img.save(buf, format='PNG', optimize=True, compress_level=6)
+    buf.seek(0)
+    return buf
+
+
+@app.route('/api/postal/<app_id>')
+def offer_postcard(app_id):
+    """Devuelve un PNG con la postal celebratoria. Solo si la postulación está en etapa Oferta."""
+    app_entry = load_application(app_id)
+    if not app_entry:
+        abort(404)
+    if app_entry.get('etapa') != 'Oferta':
+        abort(404)
+    try:
+        buf = generate_offer_postcard(app_entry)
+    except Exception:
+        app.logger.exception('Error generando postal de oferta')
+        abort(500)
+    resp = send_file(buf, mimetype='image/png',
+                     as_attachment=False,
+                     download_name=f'oferta-{app_id}.png')
+    resp.headers['Cache-Control'] = 'no-store'
+    return resp
 
 
 @app.route('/report')

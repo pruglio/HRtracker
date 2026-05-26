@@ -36,7 +36,13 @@
           </span>
         </div>
       </div>
-      <div class="d-flex gap-2 flex-shrink-0">
+      <div class="d-flex gap-2 flex-shrink-0 flex-wrap">
+        {% if application.etapa == 'Oferta' %}
+        <button type="button" class="btn btn-primary btn-sm"
+                data-bs-toggle="modal" data-bs-target="#postalModal">
+          <i class="fas fa-envelope-open-text me-1"></i>Postal de oferta
+        </button>
+        {% endif %}
         <a href="{{ url_for('edit_application', app_id=application.id) }}"
            class="btn btn-outline-secondary btn-sm">
           <i class="fas fa-edit me-1"></i>Editar
@@ -202,6 +208,42 @@
   </div>
 </div>
 
+{# === Postal de oferta modal === #}
+{% if application.etapa == 'Oferta' %}
+<div class="modal fade" id="postalModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">
+          <i class="fas fa-envelope-open-text text-primary me-2"></i>Postal de oferta
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body text-center">
+        <img id="postalImg"
+             src="{{ url_for('offer_postcard', app_id=application.id) }}"
+             alt="Postal de oferta"
+             class="img-fluid rounded shadow-sm"
+             style="max-height:60vh;">
+        <p class="text-muted small mt-2 mb-0">
+          <i class="fas fa-info-circle me-1"></i>
+          Sin salario. Lista para compartir.
+        </p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cerrar</button>
+        <button type="button" id="postalDownloadBtn" class="btn btn-outline-primary">
+          <i class="fas fa-download me-1"></i>Descargar
+        </button>
+        <button type="button" id="postalShareBtn" class="btn btn-success">
+          <i class="fab fa-whatsapp me-1"></i>Compartir por WhatsApp
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
 {% endblock %}
 
 {% block extra_js %}
@@ -264,6 +306,103 @@
         audio.load();
       });
     });
+
+    // ── Postal de oferta: confetti + share ─────────────────────
+    {% if application.etapa == 'Oferta' %}
+    (function initOfferCelebration() {
+      var appId = {{ application.id|tojson }};
+      var empresa = {{ application.empresa|tojson }};
+      var postalUrl = '/api/postal/' + appId;
+
+      // Confetti una vez por sesión
+      var confettiKey = 'confetti-app-' + appId;
+      if (!sessionStorage.getItem(confettiKey)) {
+        var script = document.createElement('script');
+        script.src = 'https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js';
+        script.onload = function() {
+          var colors = ['#F59E0B', '#EF4444', '#10B981', '#3B82F6', '#2563EB'];
+          confetti({ particleCount: 120, spread: 70, origin: { y: 0.6 }, colors: colors });
+          setTimeout(function() {
+            confetti({ particleCount: 80, spread: 100, origin: { y: 0.7 }, colors: colors });
+          }, 400);
+          sessionStorage.setItem(confettiKey, '1');
+        };
+        document.head.appendChild(script);
+      }
+
+      function slug(s) {
+        return (s || 'oferta').toLowerCase()
+          .replace(/\s+/g, '-')
+          .replace(/[^a-z0-9\-]/g, '')
+          .slice(0, 40) || 'oferta';
+      }
+
+      var dlBtn = document.getElementById('postalDownloadBtn');
+      if (dlBtn) {
+        dlBtn.addEventListener('click', async function() {
+          var orig = dlBtn.innerHTML;
+          dlBtn.disabled = true;
+          dlBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Descargando...';
+          try {
+            var res = await fetch(postalUrl);
+            if (!res.ok) throw new Error('Fetch falló');
+            var blob = await res.blob();
+            var url = URL.createObjectURL(blob);
+            var a = document.createElement('a');
+            a.href = url;
+            a.download = 'oferta-' + slug(empresa) + '.png';
+            a.click();
+            setTimeout(function() { URL.revokeObjectURL(url); }, 2000);
+          } catch (err) {
+            alert('No se pudo descargar la postal.');
+          } finally {
+            dlBtn.disabled = false;
+            dlBtn.innerHTML = orig;
+          }
+        });
+      }
+
+      var shareBtn = document.getElementById('postalShareBtn');
+      if (shareBtn) {
+        shareBtn.addEventListener('click', async function() {
+          var orig = shareBtn.innerHTML;
+          shareBtn.disabled = true;
+          shareBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Preparando...';
+          try {
+            var res = await fetch(postalUrl);
+            if (!res.ok) throw new Error('Fetch falló');
+            var blob = await res.blob();
+            var filename = 'oferta-' + slug(empresa) + '.png';
+            var file = new File([blob], filename, { type: 'image/png' });
+
+            var isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+            if (isMobile && navigator.canShare && navigator.canShare({ files: [file] })) {
+              await navigator.share({
+                files: [file],
+                title: empresa + ' — ¡Oferta!',
+                text: 'ahora sí al País Vasco en Paz!! jaja'
+              });
+            } else {
+              var url = URL.createObjectURL(blob);
+              var a = document.createElement('a');
+              a.href = url; a.download = filename; a.click();
+              setTimeout(function() { URL.revokeObjectURL(url); }, 2000);
+
+              var msg = '*¡Recibí la oferta de ' + empresa + '!* Mirá la postal — ahora sí al País Vasco en Paz!! jaja';
+              window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank');
+            }
+          } catch (err) {
+            if (err.name !== 'AbortError') {
+              alert('No se pudo compartir la postal.');
+            }
+          } finally {
+            shareBtn.disabled = false;
+            shareBtn.innerHTML = orig;
+          }
+        });
+      }
+    })();
+    {% endif %}
 
     // ── WhatsApp share (audio file via Web Share API) ────────────
     document.querySelectorAll('.whatsapp-share-btn').forEach(function(btn) {
