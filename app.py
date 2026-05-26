@@ -965,57 +965,27 @@ def generate_offer_postcard(app_entry):
         draw.text(((W - w) / 2, y), text, font=font, fill=fill)
         return bbox[3] - bbox[1]
 
-    y = 120
-    center_text('¡TENGO UNA OFERTA!', f_title, y, fill='#0F172A')
-    y += 110
+    # Layout centrado vertical: TENGO UNA OFERTA → en → EMPRESA → separador
+    center_text('¡TENGO UNA OFERTA!', f_title, 280, fill='#0F172A')
 
-    center_text('en', f_small, y, fill='#64748B')
-    y += 55
+    center_text('en', f_small, 380, fill='#64748B')
 
-    # Empresa con reducción de fuente si es larga
+    # Empresa grande con reducción de fuente si es larga
     empresa = (app_entry.get('empresa') or '').strip() or '—'
     f_emp = None
-    for size in (84, 72, 60, 50, 42):
+    for size in (120, 100, 84, 72, 60):
         f_emp = ImageFont.truetype(FONT_BOLD, size)
         bbox = draw.textbbox((0, 0), empresa, font=f_emp)
         if (bbox[2] - bbox[0]) <= W - 120:
             break
     bbox = draw.textbbox((0, 0), empresa, font=f_emp)
     w = bbox[2] - bbox[0]
-    draw.text(((W - w) / 2, y), empresa, font=f_emp, fill='#2563EB')
-    y += 120
+    h = bbox[3] - bbox[1]
+    emp_y = 460
+    draw.text(((W - w) / 2, emp_y), empresa, font=f_emp, fill='#2563EB')
 
-    center_text('para el puesto de', f_small, y, fill='#64748B')
-    y += 50
-
-    # Puesto con reducción
-    puesto = (app_entry.get('puesto') or '').strip() or '—'
-    f_pue = None
-    for size in (40, 34, 30, 26):
-        f_pue = ImageFont.truetype(FONT_MEDIUM, size)
-        bbox = draw.textbbox((0, 0), puesto, font=f_pue)
-        if (bbox[2] - bbox[0]) <= W - 120:
-            break
-    bbox = draw.textbbox((0, 0), puesto, font=f_pue)
-    w = bbox[2] - bbox[0]
-    draw.text(((W - w) / 2, y), puesto, font=f_pue, fill='#0F172A')
-    y += 100
-
-    # Chip de modalidad si existe
-    modalidad = (app_entry.get('modalidad') or '').strip()
-    if modalidad:
-        chip_text = modalidad
-        bbox = draw.textbbox((0, 0), chip_text, font=f_modal)
-        cw = bbox[2] - bbox[0] + 60
-        ch = bbox[3] - bbox[1] + 28
-        cx = (W - cw) / 2
-        draw.rounded_rectangle([cx, y, cx + cw, y + ch], radius=18,
-                               fill='#FFFFFF', outline='#2563EB', width=2)
-        draw.text((cx + 30, y + 10), chip_text, font=f_modal, fill='#2563EB')
-        y += ch + 50
-
-    # Separador
-    sep_y = y + 20
+    # Separador debajo de la empresa
+    sep_y = emp_y + h + 90
     draw.line([(W / 2 - 100, sep_y), (W / 2 + 100, sep_y)], fill='#94A3B8', width=3)
 
     # Mensaje festivo del País Vasco (script font, rojo cálido)
